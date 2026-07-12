@@ -100,6 +100,12 @@ def test_malformed_result_block_falls_through_to_result_file() -> None:
             "confidence": 0.5,
         },
         {
+            "status": "pr_opened",
+            "pr_url": "https://[foo]/pull/17",
+            "summary": "Malformed IPv6 host.",
+            "confidence": 0.5,
+        },
+        {
             "status": "failed",
             "pr_url": None,
             "summary": "",
@@ -192,13 +198,17 @@ def test_unreadable_transcript_falls_through_to_result_file() -> None:
     assert result.source == ResultSource.FILE
 
 
-def test_schema_accepts_an_absolute_non_http_uri() -> None:
+@pytest.mark.parametrize(
+    "pr_uri",
+    ["urn:example:pull-request:17", "file:///tmp/pull-request"],
+)
+def test_schema_accepts_an_absolute_non_http_uri(pr_uri: str) -> None:
     transcript = [
         AgentMessage(
             role="assistant",
             text=(
                 "```foresight-result\n"
-                '{"status":"pr_opened","pr_url":"urn:example:pull-request:17",'
+                f'{{"status":"pr_opened","pr_url":"{pr_uri}",'
                 '"summary":"Opened the pull request.","confidence":0.9}\n'
                 "```"
             ),
@@ -212,4 +222,4 @@ def test_schema_accepts_an_absolute_non_http_uri() -> None:
     )
 
     assert result.source == ResultSource.MESSAGE
-    assert result.result.pr_url == "urn:example:pull-request:17"
+    assert result.result.pr_url == pr_uri

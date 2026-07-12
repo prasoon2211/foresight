@@ -1,8 +1,13 @@
 import pytest
 
 from core.intake import create_manual_signal
-from core.models import Org, Repo, RunState
-from executor import FakeExecutor, FakeExecutorScript
+from core.models import FailureReason, Org, Repo, ResultStatus, RunState
+from executor import (
+    FakeExecutor,
+    FakeExecutorScript,
+    SandboxHandle,
+    SandboxRecord,
+)
 from orchestration.run_orchestrator import orchestrate_run
 
 
@@ -54,3 +59,38 @@ def test_reinvocation_after_unrecorded_agent_launch_recovers_same_session() -> N
     assert len(fake.agent_launches) == 1
     assert len(fake.streamed_sessions) == 1
     assert fake.streamed_sessions[0].session_id == run.agent_session_id
+
+
+@pytest.mark.django_db
+def test_reinvocation_after_synthesized_result_checkpoint_keeps_no_result_reason() -> None:
+    org = Org.objects.create(name="Acme")
+    repo = Repo.objects.create(org=org, full_name="acme/widgets")
+    _, run = create_manual_signal(
+        repo=repo,
+        title="Fix widgets",
+        body="The agent did not report.",
+        enqueue_run=lambda run_id: run_id,
+    )
+    run.state = RunState.RUNNING
+    run.sandbox_id = "fake-sandbox-1"
+    run.agent_session_id = "fake-session-1"
+    run.agent_base_url = "fake://fake-sandbox-1"
+    run.result_status = ResultStatus.FAILED
+    run.summary = "Run produced no parseable result."
+    run.confidence = 0
+    run.failure_reason = FailureReason.NO_RESULT
+    run.save()
+    fake = FakeExecutor(
+        inventory=[
+            SandboxRecord(
+                handle=SandboxHandle(run.sandbox_id),
+                labels={"run_id": str(run.pk)},
+            )
+        ]
+    )
+
+    orchestrate_run(run.pk, fake)
+
+    run.refresh_from_db()
+    assert run.state == RunState.FAILED
+    assert run.failure_reason == FailureReason.NO_RESULT

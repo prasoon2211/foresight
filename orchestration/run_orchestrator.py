@@ -178,7 +178,6 @@ def orchestrate_run(run_id: int, executor: DurableExecutor) -> RunJobOutcome:
         session_id=run.agent_session_id,
         base_url=run.agent_base_url,
     )
-    synthesized_result = False
     if not run.result_status:
         session_completed = False
         try:
@@ -232,19 +231,25 @@ def orchestrate_run(run_id: int, executor: DurableExecutor) -> RunJobOutcome:
         run.pr_url = result.pr_url or ""
         run.summary = result.summary
         run.confidence = result.confidence
+        if resolution.source == ResultSource.SYNTHESIZED:
+            run.failure_reason = FailureReason.NO_RESULT
+        elif result.status == ResultStatus.FAILED:
+            run.failure_reason = FailureReason.AGENT_REPORTED_FAILED
+        elif result.status == ResultStatus.BLOCKED:
+            run.failure_reason = FailureReason.AGENT_REPORTED_BLOCKED
         run.save(
             update_fields=[
                 "result_status",
                 "pr_url",
                 "summary",
                 "confidence",
+                "failure_reason",
                 "updated_at",
             ]
         )
-        synthesized_result = resolution.source == ResultSource.SYNTHESIZED
 
     run.refresh_from_db()
-    if synthesized_result:
+    if run.failure_reason == FailureReason.NO_RESULT:
         _fail_and_notify(
             run=run,
             executor=executor,

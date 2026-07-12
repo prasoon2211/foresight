@@ -4,13 +4,12 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 
+from jsonschema import Draft7Validator, FormatChecker
+
 from executor import AgentMessage, AgentResult, TranscriptUnavailable
 
 RESULT_BLOCK = re.compile(r"```foresight-result\s*\n(.*?)\n```", re.DOTALL)
-RESULT_KEYS = {"status", "pr_url", "summary", "confidence"}
 RESULT_STATUSES = {"pr_opened", "failed", "blocked"}
-RESULT_URI = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*:[A-Za-z0-9\-._~:/?#\[\]@!$&'()*+,;=%]*\Z")
-INVALID_PERCENT_ENCODING = re.compile(r"%(?![0-9A-Fa-f]{2})")
 RESULT_SCHEMA: dict[str, object] = {
     "$schema": "http://json-schema.org/draft-07/schema#",
     "type": "object",
@@ -23,6 +22,7 @@ RESULT_SCHEMA: dict[str, object] = {
         "confidence": {"type": "number", "minimum": 0, "maximum": 1},
     },
 }
+RESULT_VALIDATOR = Draft7Validator(RESULT_SCHEMA, format_checker=FormatChecker())
 NO_RESULT = AgentResult(
     status="failed",
     pr_url=None,
@@ -94,28 +94,20 @@ def _parse_result(raw: str | None) -> AgentResult | None:
         payload = json.loads(raw)
     except (json.JSONDecodeError, TypeError):
         return None
-    if not isinstance(payload, dict) or set(payload) != RESULT_KEYS:
+    if not isinstance(payload, dict) or not RESULT_VALIDATOR.is_valid(payload):
         return None
 
     status = payload["status"]
     pr_url = payload["pr_url"]
     summary = payload["summary"]
     confidence = payload["confidence"]
-    if not isinstance(status, str) or status not in RESULT_STATUSES:
-        return None
-    if pr_url is not None and not _is_uri(pr_url):
-        return None
+    assert isinstance(status, str)
+    assert pr_url is None or isinstance(pr_url, str)
+    assert isinstance(summary, str)
+    assert isinstance(confidence, (int, float)) and not isinstance(confidence, bool)
     if status == "pr_opened" and pr_url is None:
         return None
     if status != "pr_opened" and pr_url is not None:
-        return None
-    if not isinstance(summary, str) or not summary:
-        return None
-    if (
-        isinstance(confidence, bool)
-        or not isinstance(confidence, (int, float))
-        or not 0 <= confidence <= 1
-    ):
         return None
     return AgentResult(
         status=status,
@@ -123,14 +115,3 @@ def _parse_result(raw: str | None) -> AgentResult | None:
         summary=summary,
         confidence=float(confidence),
     )
-
-
-def _is_uri(value: object) -> bool:
-    if not isinstance(value, str):
-        return False
-    if RESULT_URI.fullmatch(value) is None or INVALID_PERCENT_ENCODING.search(value):
-        return False
-    remainder = value.split(":", 1)[1]
-    if remainder.startswith("//") and not remainder[2:].split("/", 1)[0]:
-        return False
-    return True
