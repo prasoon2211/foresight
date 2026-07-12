@@ -10,7 +10,7 @@ from executor import (
 
 def orchestrate_run(run_id: int, executor: Executor) -> None:
     """Advance one run, checkpointing each learned fact before continuing."""
-    run = Run.objects.select_related("signal__repo").get(pk=run_id)
+    run = Run.objects.select_related("signal__repo", "signal__org").get(pk=run_id)
     if run.state in {RunState.AWAITING_REVIEW, RunState.DONE, RunState.FAILED}:
         return
 
@@ -42,7 +42,7 @@ def orchestrate_run(run_id: int, executor: Executor) -> None:
             AgentLaunch(
                 prompt=f"{run.signal.title}\n\n{run.signal.body}",
                 model="fake/model",
-                credentials={},
+                credentials=run.signal.org.agent_credentials(),
                 server_password=run.server_password,
                 output_schema={
                     "type": "object",

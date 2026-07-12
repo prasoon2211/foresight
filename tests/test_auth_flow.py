@@ -107,6 +107,12 @@ def test_org_admin_invites_existing_user_with_role(client: Client, role: str) ->
     users = get_user_model().objects
     owner = users.create_user(username="owner", email="owner@example.com")
     teammate = users.create_user(username="teammate", email="teammate@example.com")
+    EmailAddress.objects.create(
+        user=teammate,
+        email=teammate.email,
+        verified=True,
+        primary=True,
+    )
     client.force_login(owner)
     org_id = client.post(
         "/api/orgs",
@@ -126,3 +132,45 @@ def test_org_admin_invites_existing_user_with_role(client: Client, role: str) ->
         "email": "teammate@example.com",
         "role": role,
     }
+
+
+@pytest.mark.django_db(transaction=True)
+def test_inviting_unknown_email_returns_agent_legible_error(client: Client) -> None:
+    owner = get_user_model().objects.create_user(
+        username="owner",
+        email="owner@example.com",
+    )
+    client.force_login(owner)
+    org_id = client.post(
+        "/api/orgs",
+        data={"name": "Acme"},
+        content_type="application/json",
+    ).json()["id"]
+
+    response = client.post(
+        f"/api/orgs/{org_id}/members",
+        data={"email": "unknown@example.com", "role": "member"},
+        content_type="application/json",
+    )
+
+    assert response.status_code == 404
+    assert response.json() == {
+        "code": "user_not_found",
+        "message": "No verified user has that email address.",
+        "hint": "Ask the teammate to sign up and verify their email, then try again.",
+    }
+
+
+@pytest.mark.django_db(transaction=True)
+def test_headless_auth_validation_errors_include_agent_hint(client: Client) -> None:
+    response = client.post(
+        "/_allauth/browser/v1/auth/login",
+        data={"email": "missing@example.com", "password": "wrong password"},
+        content_type="application/json",
+    )
+
+    payload = response.json()
+    assert response.status_code == 400
+    assert payload["code"] == "email_password_mismatch"
+    assert payload["message"]
+    assert payload["hint"] == "Correct the supplied credentials or account details, then try again."

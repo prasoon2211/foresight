@@ -32,3 +32,7 @@ def test_openapi_documents_session_cookie_and_bearer_token(client: Client) -> No
     assert any(definition.get("scheme") == "bearer" for definition in schemes.values())
     signal_security = schema["paths"]["/api/orgs/{org_id}/signals"]["post"]["security"]
     assert len(signal_security) == 2
+    signal_responses = schema["paths"]["/api/orgs/{org_id}/signals"]["post"]["responses"]
+    for status in ("401", "403", "404", "422"):
+        schema_ref = signal_responses[status]["content"]["application/json"]["schema"]["$ref"]
+        assert schema_ref.endswith("/ApiErrorOut")

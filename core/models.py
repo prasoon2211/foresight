@@ -51,6 +51,14 @@ class Org(models.Model):
     def __str__(self) -> str:
         return self.name
 
+    def agent_credentials(self) -> dict[str, str]:
+        credentials: dict[str, str] = {}
+        if self.agent_api_key:
+            credentials["ANTHROPIC_API_KEY"] = self.agent_api_key
+        if self.agent_base_url:
+            credentials["ANTHROPIC_BASE_URL"] = self.agent_base_url
+        return credentials
+
 
 class OrgMembership(models.Model):
     class Role(models.TextChoices):

@@ -30,6 +30,7 @@ MIDDLEWARE = [
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "allauth.account.middleware.AccountMiddleware",
+    "api.middleware.AllauthErrorHintMiddleware",
 ]
 ROOT_URLCONF = "foresight.urls"
 ASGI_APPLICATION = "foresight.asgi.application"

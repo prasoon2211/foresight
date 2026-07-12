@@ -14,7 +14,11 @@ def test_api_token_drives_signal_run_flow_and_revocation(client: Client) -> None
         username="owner",
         email="owner@example.com",
     )
-    org = Org.objects.create(name="Acme")
+    org = Org.objects.create(
+        name="Acme",
+        agent_api_key="llm-secret-value",
+        agent_base_url="https://llm.example.test/v1",
+    )
     OrgMembership.objects.create(
         org=org,
         user=user,
@@ -75,6 +79,10 @@ def test_api_token_drives_signal_run_flow_and_revocation(client: Client) -> None
 
     assert queued.json()["state"] == RunState.QUEUED
     assert completed.json()["state"] == RunState.AWAITING_REVIEW
+    assert fake.agent_launches[0].credentials == {
+        "ANTHROPIC_API_KEY": "llm-secret-value",
+        "ANTHROPIC_BASE_URL": "https://llm.example.test/v1",
+    }
 
     client.force_login(user)
     revoked = client.delete(f"/api/orgs/{org.id}/api-tokens/{token.id}")

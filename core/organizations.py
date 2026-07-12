@@ -1,8 +1,12 @@
-from django.contrib.auth import get_user_model
+from allauth.account.models import EmailAddress
 from django.contrib.auth.models import User
 from django.db import transaction
 
 from core.models import Org, OrgMembership
+
+
+class InviteeNotFound(Exception):
+    pass
 
 
 def create_org(*, name: str, owner: User) -> tuple[Org, OrgMembership]:
@@ -22,8 +26,14 @@ def invite_org_member(
     email: str,
     role: str,
 ) -> OrgMembership:
-    user = get_user_model().objects.get(email__iexact=email)
-    return OrgMembership.objects.create(org=org, user=user, role=role)
+    address = (
+        EmailAddress.objects.select_related("user")
+        .filter(email__iexact=email, verified=True)
+        .first()
+    )
+    if address is None:
+        raise InviteeNotFound
+    return OrgMembership.objects.create(org=org, user=address.user, role=role)
 
 
 def update_org_settings(
