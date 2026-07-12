@@ -1,40 +1,45 @@
-from typing import cast
+import logging
+from typing import Protocol, cast
 
 import pytest
 from django.db import transaction
+from procrastinate.connector import BaseAsyncConnector
 from procrastinate.contrib.django import app
-from procrastinate.contrib.django.django_connector import DjangoConnector
-from procrastinate.contrib.django.models import ProcrastinateJob
 
 from orchestration.tasks import enqueue_demo_job
 
 
-class RollBackDemoJob(Exception):
+class ForceTransactionRollback(Exception):
     pass
 
 
+class WorkerConnectorFactory(Protocol):
+    def get_worker_connector(self) -> BaseAsyncConnector: ...
+
+
 @pytest.mark.django_db(transaction=True)
-def test_demo_job_is_enqueued_in_transaction_and_run_in_process() -> None:
-    with pytest.raises(RollBackDemoJob):
+def test_demo_job_is_enqueued_in_transaction_and_run_in_process(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.INFO, logger="orchestration.tasks")
+
+    with pytest.raises(ForceTransactionRollback):
         with transaction.atomic():
             enqueue_demo_job(message="must roll back")
-            raise RollBackDemoJob
-
-    assert not ProcrastinateJob.objects.exists()
+            raise ForceTransactionRollback
 
     with transaction.atomic():
-        job_id = enqueue_demo_job(message="must execute")
+        enqueue_demo_job(message="must execute")
 
-    queued_job = ProcrastinateJob.objects.get(id=job_id)
-    assert queued_job.status == "todo"
-
-    django_connector = cast(DjangoConnector, app.connector)
-    with app.replace_connector(django_connector.get_worker_connector()):
+    connector = cast(WorkerConnectorFactory, app.connector)
+    with app.replace_connector(connector.get_worker_connector()):
         app.run_worker(
             wait=False,
             install_signal_handlers=False,
             listen_notify=False,
         )
 
-    queued_job.refresh_from_db()
-    assert queued_job.status == "succeeded"
+    demo_messages = [
+        record.getMessage() for record in caplog.records if record.name == "orchestration.tasks"
+    ]
+    assert demo_messages == ["Demo job executed: must execute"]
