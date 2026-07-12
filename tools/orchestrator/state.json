@@ -41,10 +41,13 @@
       "mergedAt": "2026-07-12T18:13:02.189Z"
     },
     "14": {
-      "status": "launched",
+      "status": "merged",
       "agentId": "bc-02128ae2-a4d2-4b89-8bb7-e563e0fab811",
       "runId": "run-c5ea2e8b-bd1d-471e-b778-1b8fb4fa9da2",
-      "launchedAt": "2026-07-12T18:13:37.070Z"
+      "launchedAt": "2026-07-12T18:13:37.070Z",
+      "prUrl": "https://github.com/prasoon2211/foresight/pull/10",
+      "branch": "cursor/dashboard-run-room-b811",
+      "mergedAt": "2026-07-12T20:06:01.528Z"
     },
     "07": {
       "status": "merged",
