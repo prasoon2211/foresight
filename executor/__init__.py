@@ -1,17 +1,22 @@
 """Sandbox and agent-session boundary."""
 
-from executor.fake import FakeExecutor
+from executor.fake import FakeExecutor, FakeExecutorScript
 from executor.protocol import (
     AgentEvent,
     AgentLaunch,
     AgentResult,
     AgentSession,
     AttachEndpoints,
+    DurableExecutor,
     EnvFile,
     Executor,
     Resources,
+    SandboxDied,
     SandboxHandle,
+    SandboxInventory,
+    SandboxRecord,
     SandboxSpec,
+    SetupFailed,
 )
 
 __all__ = [
@@ -20,10 +25,16 @@ __all__ = [
     "AgentResult",
     "AgentSession",
     "AttachEndpoints",
+    "DurableExecutor",
     "EnvFile",
     "Executor",
     "FakeExecutor",
+    "FakeExecutorScript",
     "Resources",
+    "SandboxDied",
     "SandboxHandle",
+    "SandboxInventory",
+    "SandboxRecord",
     "SandboxSpec",
+    "SetupFailed",
 ]

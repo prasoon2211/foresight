@@ -6,12 +6,16 @@ The boundary discipline from the spec holds: the webhook endpoint verifies signa
 
 **Blocked by:** 08 — Tracer bullet; 09 — Auth and orgs (connections belong to orgs).
 
-**Status:** claimed
+**Status:** resolved
 
-- [ ] Recorded webhook payloads POSTed at the real endpoint drive the whole flow: installation created → connection active; repos selected → Repo rows enabled with default config; issue labeled → signal + run; PR merged → run and signal done. Bad signatures rejected.
-- [ ] The canonical end-to-end: labeled-issue webhook in, fake executor scripted to succeed, fake GitHub client saw the start comment, finish comment, and label swap, surface state updated, re-notify idempotent
-- [ ] Failure write-back: a failed run's finish comment explains the failure reason
-- [ ] Installation deleted → repos disconnected → signals derive stranded → dispatch refuses them; reinstall reverses it
-- [ ] Demoable: a real App pointed at a test repo (or replayed payloads) produces the comments and labels
+- [x] Recorded webhook payloads POSTed at the real endpoint drive the whole flow: installation created → connection active; repos selected → Repo rows enabled with default config; issue labeled → signal + run; PR merged → run and signal done. Bad signatures rejected.
+- [x] The canonical end-to-end: labeled-issue webhook in, fake executor scripted to succeed, fake GitHub client saw the start comment, finish comment, and label swap, surface state updated, re-notify idempotent
+- [x] Failure write-back: a failed run's finish comment explains the failure reason
+- [x] Installation deleted → repos disconnected → signals derive stranded → dispatch refuses them; reinstall reverses it
+- [x] Demoable: a real App pointed at a test repo (or replayed payloads) produces the comments and labels
 
 Spec sections: GitHub integration, Domain model (SurfaceConnection, Repo, surface state); user stories 5–6, 12, 14–15, 18, 26, 36.
+
+## Comments
+
+2026-07-12 — Implemented and verified the complete GitHub issue-to-run loop in PR https://github.com/prasoon2211/foresight/pull/7.
