@@ -24,21 +24,35 @@ if (!apiKey) {
 
 const prompt = buildWorkerPrompt(nn);
 
-const agent = await Agent.create({
-  apiKey,
-  name: `foresight-ticket-${nn}`,
-  model: { id: "gpt-5.6-sol", params: [{ id: "reasoning", value: "high" }] },
-  cloud: {
-    repos: [{ url: REPO_URL, startingRef: "main" }],
-    autoCreatePR: true,
-    skipReviewerRequest: true,
-  },
-});
-
-console.log(`agentId: ${agent.agentId}`);
-
-const run = await agent.send(prompt);
-console.log(`runId: ${run.id}`);
+let agent, run;
+try {
+  agent = await Agent.create({
+    apiKey,
+    name: `foresight-ticket-${nn}`,
+    model: {
+      id: "gpt-5.6-sol",
+      params: [
+        { id: "context", value: "1m" },
+        { id: "reasoning", value: "high" },
+        { id: "fast", value: "false" },
+      ],
+    },
+    cloud: {
+      repos: [{ url: REPO_URL, startingRef: "main" }],
+      autoCreatePR: true,
+      skipReviewerRequest: true,
+    },
+  });
+  console.log(`agentId: ${agent.agentId}`);
+  run = await agent.send(prompt);
+  console.log(`runId: ${run.id}`);
+} catch (err) {
+  console.error(
+    `launch failed: ${err.constructor?.name}: ${err.message} | code: ${err.code} | status: ${err.status} | retryable: ${err.isRetryable}`
+  );
+  if (err.helpUrl) console.error(`helpUrl: ${err.helpUrl}`);
+  process.exit(1);
+}
 
 updateTicket(nn, {
   status: "launched",
