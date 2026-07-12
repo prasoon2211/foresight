@@ -1,0 +1,8 @@
+{
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".."
+  },
+  "install": "if [ -f pyproject.toml ]; then uv sync; fi; if [ -f frontend/package.json ]; then (cd frontend && npm install); fi; if [ -f package.json ]; then npm install; fi; true",
+  "start": "sudo service docker start"
+}
