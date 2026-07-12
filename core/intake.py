@@ -11,12 +11,17 @@ from core.models import (
     RunState,
     Signal,
     SignalSource,
+    SnapshotBuildStatus,
 )
 
 RunEnqueuer = Callable[[int], object]
 
 
 class StrandedSignal(Exception):
+    pass
+
+
+class SnapshotNotReady(Exception):
     pass
 
 
@@ -36,6 +41,16 @@ def _refuse_stranded(signal: Signal) -> None:
         == ConnectionStatus.DISCONNECTED
     ):
         raise StrandedSignal("cannot dispatch a signal whose repo is disconnected")
+
+
+def _refuse_unready_snapshot(signal: Signal) -> None:
+    status, output = Repo.objects.values_list(
+        "snapshot_build_status",
+        "snapshot_build_output",
+    ).get(pk=signal.repo_id)
+    if status != SnapshotBuildStatus.READY:
+        detail = f": {output}" if output else ""
+        raise SnapshotNotReady(f"repo snapshot is {status}{detail}")
 
 
 def create_manual_signal(
@@ -62,6 +77,7 @@ def dispatch_signal(*, signal: Signal, enqueue_run: RunEnqueuer) -> Run:
     if signal.intake_state != IntakeState.RECEIVED:
         raise ValueError("only received signals can be dispatched")
     _refuse_stranded(signal)
+    _refuse_unready_snapshot(signal)
 
     with transaction.atomic():
         run = _create_run(signal)
@@ -76,6 +92,7 @@ def rerun_signal(*, signal: Signal, enqueue_run: RunEnqueuer) -> Run:
     if signal.intake_state != IntakeState.DISPATCHED:
         raise ValueError("only dispatched signals can be re-run")
     _refuse_stranded(signal)
+    _refuse_unready_snapshot(signal)
 
     with transaction.atomic():
         if signal.runs.filter(

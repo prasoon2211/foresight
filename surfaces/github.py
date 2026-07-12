@@ -19,6 +19,7 @@ from core.models import (
     SurfaceConnectionStatus,
     SurfaceType,
 )
+from core.snapshots import SnapshotBuildEnqueuer, request_snapshot_build
 from surfaces.github_client import GitHubClient, get_github_client
 
 RunEnqueuer = Callable[[int], object]
@@ -45,19 +46,23 @@ def process_webhook(
     event: str,
     payload: dict[str, Any],
     enqueue_run: RunEnqueuer,
+    enqueue_snapshot: SnapshotBuildEnqueuer,
 ) -> None:
     """Interpret one verified GitHub webhook as domain actions."""
     if event == "installation":
-        _process_installation(payload)
+        _process_installation(payload, enqueue_snapshot)
     elif event == "installation_repositories":
-        _process_installation_repositories(payload)
+        _process_installation_repositories(payload, enqueue_snapshot)
     elif event == "issues":
         _process_issues(payload, enqueue_run)
     elif event == "pull_request":
         _process_pull_request(payload)
 
 
-def _process_installation(payload: dict[str, Any]) -> None:
+def _process_installation(
+    payload: dict[str, Any],
+    enqueue_snapshot: SnapshotBuildEnqueuer,
+) -> None:
     installation = payload["installation"]
     installation_id = installation["id"]
     account_label = installation["account"]["login"]
@@ -88,10 +93,17 @@ def _process_installation(payload: dict[str, Any]) -> None:
         "account_id": installation["account"]["id"],
     }
     connection.save(update_fields=["status", "account_label", "identity"])
-    _connect_repositories(connection, payload.get("repositories", []))
+    _connect_repositories(
+        connection,
+        payload.get("repositories", []),
+        enqueue_snapshot,
+    )
 
 
-def _process_installation_repositories(payload: dict[str, Any]) -> None:
+def _process_installation_repositories(
+    payload: dict[str, Any],
+    enqueue_snapshot: SnapshotBuildEnqueuer,
+) -> None:
     installation = payload["installation"]
     connection = _find_connection(
         installation["id"],
@@ -99,7 +111,11 @@ def _process_installation_repositories(payload: dict[str, Any]) -> None:
     )
     if connection is None:
         return
-    _connect_repositories(connection, payload.get("repositories_added", []))
+    _connect_repositories(
+        connection,
+        payload.get("repositories_added", []),
+        enqueue_snapshot,
+    )
     removed_names = [
         repository["full_name"] for repository in payload.get("repositories_removed", [])
     ]
@@ -211,9 +227,10 @@ def _find_connection(
 def _connect_repositories(
     connection: SurfaceConnection,
     repositories: list[dict[str, Any]],
+    enqueue_snapshot: SnapshotBuildEnqueuer,
 ) -> None:
     for repository in repositories:
-        repo, _ = Repo.objects.get_or_create(
+        repo, created = Repo.objects.get_or_create(
             org=connection.org,
             full_name=repository["full_name"],
             defaults={
@@ -231,6 +248,11 @@ def _connect_repositories(
                 "connection_status",
             ]
         )
+        if created:
+            request_snapshot_build(
+                repo=repo,
+                enqueue_build=enqueue_snapshot,
+            )
 
 
 class GitHubSurfaceAdapter:

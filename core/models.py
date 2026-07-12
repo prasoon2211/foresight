@@ -6,7 +6,7 @@ from encrypted_fields.fields import EncryptedJSONField, EncryptedTextField
 
 from core.harness import DEFAULT_HARNESS_PROMPT
 
-DEFAULT_BASE_SNAPSHOT = "foresight/default"
+DEFAULT_BASE_SNAPSHOT = "node:22-bookworm"
 
 
 class IntakeState(models.TextChoices):
@@ -66,6 +66,18 @@ class SurfaceConnectionStatus(models.TextChoices):
 class ConnectionStatus(models.TextChoices):
     CONNECTED = "connected", "Connected"
     DISCONNECTED = "disconnected", "Disconnected"
+
+
+class SnapshotBuildStatus(models.TextChoices):
+    BUILDING = "building", "Building"
+    READY = "ready", "Ready"
+    FAILED = "failed", "Failed"
+
+
+class SetupVerificationStatus(models.TextChoices):
+    NOT_RUN = "not_run", "Not run"
+    SUCCESS = "success", "Success"
+    FAILED = "failed", "Failed"
 
 
 class Org(models.Model):
@@ -191,6 +203,20 @@ class Repo(models.Model):
     setup_script = models.TextField(default="", blank=True)
     harness_prompt = models.TextField(default=DEFAULT_HARNESS_PROMPT)
     env = EncryptedJSONField(default=dict, blank=True)
+    snapshot_build_status = models.CharField(
+        max_length=20,
+        choices=SnapshotBuildStatus,
+        default=SnapshotBuildStatus.READY,
+    )
+    snapshot_id = models.CharField(max_length=255, blank=True)
+    snapshot_build_token = models.CharField(max_length=32, blank=True)
+    snapshot_build_output = models.TextField(blank=True)
+    setup_verification_status = models.CharField(
+        max_length=20,
+        choices=SetupVerificationStatus,
+        default=SetupVerificationStatus.NOT_RUN,
+    )
+    setup_verification_output = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -260,6 +286,10 @@ class Run(models.Model):
     pr_merged_at = models.DateTimeField(null=True, blank=True)
     failure_reason = models.CharField(max_length=40, choices=FailureReason, blank=True)
     failure_detail = models.TextField(blank=True)
+    setup_log_path = models.CharField(max_length=1000, blank=True)
+    agent_log_path = models.CharField(max_length=1000, blank=True)
+    session_export_path = models.CharField(max_length=1000, blank=True)
+    sandbox_archived_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

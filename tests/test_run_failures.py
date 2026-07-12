@@ -44,11 +44,17 @@ def test_sandbox_death_mid_stream_records_reason_and_tears_down() -> None:
     run.refresh_from_db()
     assert run.state == RunState.FAILED
     assert run.failure_reason == FailureReason.SANDBOX_DIED
-    assert fake.calls == ["create_sandbox", "launch_agent", "stream_events", "destroy"]
+    assert fake.calls == [
+        "create_sandbox",
+        "read_file",
+        "launch_agent",
+        "stream_events",
+        "destroy",
+    ]
 
 
 @pytest.mark.django_db
-def test_agent_session_error_records_reason_and_tears_down() -> None:
+def test_agent_session_error_records_reason_and_retains_sandbox() -> None:
     org = Org.objects.create(name="Acme")
     repo = Repo.objects.create(org=org, full_name="acme/widgets")
     _, run = create_manual_signal(
@@ -64,7 +70,15 @@ def test_agent_session_error_records_reason_and_tears_down() -> None:
     run.refresh_from_db()
     assert run.state == RunState.FAILED
     assert run.failure_reason == FailureReason.AGENT_ERROR
-    assert fake.calls == ["create_sandbox", "launch_agent", "stream_events", "destroy"]
+    assert fake.calls == [
+        "create_sandbox",
+        "read_file",
+        "launch_agent",
+        "stream_events",
+        "read_file",
+        "get_session_messages",
+        "archive",
+    ]
 
 
 @pytest.mark.django_db
@@ -95,10 +109,12 @@ def test_agent_reported_failure_records_reason_and_result() -> None:
     assert run.summary == "The upstream API is undocumented."
     assert fake.calls == [
         "create_sandbox",
+        "read_file",
         "launch_agent",
         "stream_events",
         "get_session_messages",
-        "destroy",
+        "read_file",
+        "archive",
     ]
 
 
@@ -130,15 +146,17 @@ def test_agent_reported_blocked_records_reason_and_result() -> None:
     assert run.summary == "The required service is unreachable."
     assert fake.calls == [
         "create_sandbox",
+        "read_file",
         "launch_agent",
         "stream_events",
         "get_session_messages",
-        "destroy",
+        "read_file",
+        "archive",
     ]
 
 
 @pytest.mark.django_db
-def test_idle_session_without_result_records_reason_and_tears_down() -> None:
+def test_idle_session_without_result_records_reason_and_retains_sandbox() -> None:
     org = Org.objects.create(name="Acme")
     repo = Repo.objects.create(org=org, full_name="acme/widgets")
     _, run = create_manual_signal(
@@ -160,11 +178,13 @@ def test_idle_session_without_result_records_reason_and_tears_down() -> None:
     assert run.confidence == 0
     assert fake.calls == [
         "create_sandbox",
+        "read_file",
         "launch_agent",
         "stream_events",
         "get_session_messages",
         "read_file",
-        "destroy",
+        "read_file",
+        "archive",
     ]
 
 
@@ -197,9 +217,11 @@ def test_success_result_without_pr_url_records_no_result() -> None:
     assert run.confidence == 0
     assert fake.calls == [
         "create_sandbox",
+        "read_file",
         "launch_agent",
         "stream_events",
         "get_session_messages",
         "read_file",
-        "destroy",
+        "read_file",
+        "archive",
     ]

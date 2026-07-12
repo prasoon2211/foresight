@@ -6,7 +6,7 @@ from django.conf import settings
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 
-from orchestration.tasks import enqueue_run_orchestrator
+from orchestration.tasks import enqueue_run_orchestrator, enqueue_snapshot_build
 from surfaces.github import process_webhook
 
 
@@ -37,5 +37,6 @@ def github_webhook(request: HttpRequest) -> HttpResponse:
         event=request.headers.get("X-GitHub-Event", ""),
         payload=payload,
         enqueue_run=enqueue_run_orchestrator,
+        enqueue_snapshot=enqueue_snapshot_build,
     )
     return JsonResponse({"accepted": True}, status=202)

@@ -65,6 +65,8 @@ def test_reconciliation_rechecks_provider_before_failing_newly_checkpointed_run(
         handle = fake.create_sandbox(
             SandboxSpec(
                 snapshot="repo:acme/widgets",
+                git_ref="main",
+                git_token=None,
                 env_files=[],
                 setup_script=None,
                 labels={"run_id": str(run.pk)},

@@ -15,6 +15,9 @@ from executor.protocol import (
     SandboxRecord,
     SandboxSpec,
     SetupFailed,
+    SnapshotBuild,
+    SnapshotBuildFailed,
+    SnapshotSpec,
 )
 
 DEFAULT_RESULT = AgentResult(
@@ -30,7 +33,10 @@ class FakeExecutorScript:
     event_batches: Iterable[Iterable[AgentEvent]] | None = None
     session_messages: list[AgentMessage] | None = None
     result_file: str | None = None
+    setup_output: str = ""
+    agent_output: str = "Fake agent log."
     setup_failure: str | None = None
+    snapshot_failure: str | None = None
     sandbox_dies: bool = False
     interrupt_before_launch_once: bool = False
     interrupt_before_stream_once: bool = False
@@ -44,6 +50,8 @@ class FakeExecutorScript:
 
 class FakeExecutor:
     """Scriptable, in-memory implementation of the executor boundary."""
+
+    executor_type = "fake"
 
     def __init__(
         self,
@@ -62,7 +70,10 @@ class FakeExecutor:
         else:
             self._session_messages = []
         self._result_file = script.result_file
+        self._setup_output = script.setup_output
+        self._agent_output = script.agent_output
         self._setup_failure = script.setup_failure
+        self._snapshot_failure = script.snapshot_failure
         self._sandbox_dies = script.sandbox_dies
         self._interrupt_before_launch_once = script.interrupt_before_launch_once
         self._interrupt_before_stream_once = script.interrupt_before_stream_once
@@ -75,12 +86,14 @@ class FakeExecutor:
         self._next_sandbox = 1
         self._next_session = 1
         self._destroyed: set[str] = set()
+        self._archived: set[str] = set()
         self._inventory = {item.handle.sandbox_id: item for item in inventory}
         self._sessions: dict[str, AgentSession] = {}
         self.calls: list[str] = []
         self.sandbox_specs: list[SandboxSpec] = []
         self.agent_launches: list[AgentLaunch] = []
         self.streamed_sessions: list[AgentSession] = []
+        self.snapshot_specs: list[SnapshotSpec] = []
 
     @classmethod
     def succeeding(cls, result: AgentResult) -> "FakeExecutor":
@@ -100,7 +113,7 @@ class FakeExecutor:
         self._next_sandbox += 1
         self._inventory[handle.sandbox_id] = SandboxRecord(
             handle=handle,
-            labels=dict(spec.labels),
+            labels={**spec.labels, "provisioning_complete": "true"},
         )
         if self._after_create is not None:
             self._after_create()
@@ -124,6 +137,7 @@ class FakeExecutor:
         session = AgentSession(
             session_id=f"fake-session-{self._next_session}",
             base_url=f"fake://{handle.sandbox_id}",
+            server_password=launch.server_password,
         )
         self._sessions[handle.sandbox_id] = session
         self._next_session += 1
@@ -185,13 +199,36 @@ class FakeExecutor:
 
     def read_file(self, handle: SandboxHandle, path: str) -> str | None:
         self.calls.append("read_file")
+        if path == "/tmp/foresight/setup.log":
+            return self._setup_output
+        if path == "/tmp/foresight/agent.log":
+            return self._agent_output
         if path != "/tmp/foresight/result.json":
             return None
         return self._result_file
 
+    def build_snapshot(self, spec: SnapshotSpec) -> SnapshotBuild:
+        self.calls.append("build_snapshot")
+        self.snapshot_specs.append(spec)
+        if self._snapshot_failure is not None:
+            raise SnapshotBuildFailed(self._snapshot_failure)
+        return SnapshotBuild(
+            snapshot_id=f"fake-snapshot-{len(self.snapshot_specs)}",
+            output="Fake snapshot built.",
+        )
+
+    def archive(self, handle: SandboxHandle) -> None:
+        self.calls.append("archive")
+        self._archived.add(handle.sandbox_id)
+
+    def revive(self, handle: SandboxHandle) -> None:
+        self.calls.append("revive")
+        self._archived.discard(handle.sandbox_id)
+
     def destroy(self, handle: SandboxHandle) -> None:
         self.calls.append("destroy")
         self._destroyed.add(handle.sandbox_id)
+        self._archived.discard(handle.sandbox_id)
         self._inventory.pop(handle.sandbox_id, None)
 
     def list_sandboxes(self) -> list[SandboxRecord]:

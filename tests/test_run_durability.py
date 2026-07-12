@@ -36,6 +36,35 @@ def test_reinvocation_after_unrecorded_sandbox_creation_recovers_same_sandbox() 
 
 
 @pytest.mark.django_db
+def test_reinvocation_replaces_partially_provisioned_sandbox() -> None:
+    org = Org.objects.create(name="Acme")
+    repo = Repo.objects.create(org=org, full_name="acme/widgets")
+    _, run = create_manual_signal(
+        repo=repo,
+        title="Fix widgets",
+        body="Resume after setup was interrupted.",
+        enqueue_run=lambda run_id: run_id,
+    )
+    run.state = RunState.PROVISIONING
+    run.save(update_fields=["state"])
+    fake = FakeExecutor(
+        inventory=[
+            SandboxRecord(
+                handle=SandboxHandle("partial-sandbox"),
+                labels={"run_id": str(run.pk)},
+            )
+        ]
+    )
+
+    orchestrate_run(run.pk, fake)
+
+    run.refresh_from_db()
+    assert run.state == RunState.AWAITING_REVIEW
+    assert run.sandbox_id != "partial-sandbox"
+    assert fake.calls[:3] == ["list_sandboxes", "destroy", "create_sandbox"]
+
+
+@pytest.mark.django_db
 def test_reinvocation_after_unrecorded_agent_launch_recovers_same_session() -> None:
     org = Org.objects.create(name="Acme")
     repo = Repo.objects.create(org=org, full_name="acme/widgets")

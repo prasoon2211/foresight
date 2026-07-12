@@ -59,6 +59,12 @@ GITHUB_APP_ID = os.getenv("GITHUB_APP_ID", "")
 GITHUB_APP_PRIVATE_KEY = os.getenv("GITHUB_APP_PRIVATE_KEY", "").replace("\\n", "\n")
 GITHUB_API_URL = os.getenv("GITHUB_API_URL", "https://api.github.com")
 PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "http://localhost:8000").rstrip("/")
+OPENCODE_VERSION = os.getenv("OPENCODE_VERSION", "1.17.18")
+OPENCODE_MODEL = os.getenv("OPENCODE_MODEL", "anthropic/claude-sonnet-4-5")
+SESSION_EXPORT_ROOT = Path(
+    os.getenv("SESSION_EXPORT_ROOT", str(BASE_DIR / "var" / "session-exports"))
+)
+EXECUTOR_TYPE = os.getenv("EXECUTOR_TYPE", "fake")
 
 AUTHENTICATION_BACKENDS = [
     "django.contrib.auth.backends.ModelBackend",
