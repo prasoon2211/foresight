@@ -1,6 +1,8 @@
 import os
+import ssl
 import uuid
 from pathlib import Path
+from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 import pytest
@@ -95,11 +97,16 @@ def test_real_daytona_smoke_contract(tmp_path: Path, monkeypatch: pytest.MonkeyP
         assert Path(export_path).is_file()
 
         endpoints = executor.get_attach_endpoints(handle, session)
-        health = httpx.get(
-            f"{endpoints.api_url.rstrip('/')}/global/health",
-            auth=("opencode", session.server_password),
-            timeout=30,
+        signed_url = urlsplit(endpoints.api_url)
+        health_url = urlunsplit(
+            signed_url._replace(path=f"{signed_url.path.rstrip('/')}/global/health")
         )
+        with httpx.Client(verify=ssl.create_default_context()) as browser:
+            health = browser.get(
+                health_url,
+                auth=("opencode", session.server_password),
+                timeout=30,
+            )
         assert health.status_code == 200
         assert endpoints.terminal_ws.startswith("wss://")
         assert (
