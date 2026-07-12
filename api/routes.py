@@ -12,7 +12,7 @@ from api.schemas import (
 )
 from core.intake import create_manual_signal
 from core.models import Repo, Run, Signal
-from core.outcome import derive_outcome_status
+from core.outcome import RunOutcome, derive_outcome_status
 from orchestration.tasks import enqueue_run_orchestrator
 
 router = Router(tags=["signals", "runs"])
@@ -49,7 +49,12 @@ def list_signals(request: HttpRequest) -> list[SignalOut]:
             intake_state=signal.intake_state,
             outcome_status=derive_outcome_status(
                 signal.intake_state,
-                signal.runs.order_by("created_at", "pk").values_list("state", flat=True),
+                (
+                    RunOutcome(state=state, pr_merged=pr_merged_at is not None)
+                    for state, pr_merged_at in signal.runs.order_by("created_at", "pk").values_list(
+                        "state", "pr_merged_at"
+                    )
+                ),
             ),
         )
         for signal in Signal.objects.order_by("created_at", "pk")

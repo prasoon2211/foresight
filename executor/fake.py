@@ -30,6 +30,9 @@ class FakeExecutor:
         self._next_session = 1
         self._destroyed: set[str] = set()
         self.calls: list[str] = []
+        self.sandbox_specs: list[SandboxSpec] = []
+        self.agent_launches: list[AgentLaunch] = []
+        self.streamed_sessions: list[AgentSession] = []
 
     @classmethod
     def succeeding(cls, result: AgentResult) -> "FakeExecutor":
@@ -37,6 +40,7 @@ class FakeExecutor:
 
     def create_sandbox(self, spec: SandboxSpec) -> SandboxHandle:
         self.calls.append("create_sandbox")
+        self.sandbox_specs.append(spec)
         handle = SandboxHandle(sandbox_id=f"fake-sandbox-{self._next_sandbox}")
         self._next_sandbox += 1
         return handle
@@ -47,6 +51,7 @@ class FakeExecutor:
         launch: AgentLaunch,
     ) -> AgentSession:
         self.calls.append("launch_agent")
+        self.agent_launches.append(launch)
         session = AgentSession(
             session_id=f"fake-session-{self._next_session}",
             base_url=f"fake://{handle.sandbox_id}",
@@ -75,6 +80,7 @@ class FakeExecutor:
         session: AgentSession,
     ) -> Iterator[AgentEvent]:
         self.calls.append("stream_events")
+        self.streamed_sessions.append(session)
         if self._scripts:
             events = self._scripts.popleft()
         elif self._use_default_script:

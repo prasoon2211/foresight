@@ -103,6 +103,7 @@ class Run(models.Model):
     pr_url = models.URLField(max_length=500, blank=True)
     summary = models.TextField(blank=True)
     confidence = models.FloatField(null=True, blank=True)
+    pr_merged_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

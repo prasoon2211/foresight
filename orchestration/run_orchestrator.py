@@ -90,5 +90,3 @@ def orchestrate_run(run_id: int, executor: Executor) -> None:
                 "updated_at",
             ]
         )
-
-    executor.destroy(handle)

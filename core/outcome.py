@@ -1,19 +1,26 @@
 from collections.abc import Iterable
+from dataclasses import dataclass
 
 from core.models import IntakeState, RunState
 
 
+@dataclass(frozen=True)
+class RunOutcome:
+    state: RunState | str
+    pr_merged: bool = False
+
+
 def derive_outcome_status(
     intake_state: IntakeState | str,
-    run_states: Iterable[RunState | str],
+    runs: Iterable[RunOutcome],
 ) -> str:
     """Derive a signal's user-facing status from its durable state."""
     if intake_state != IntakeState.DISPATCHED:
         return intake_state
 
-    states = list(run_states)
-    if RunState.DONE in states:
+    outcomes = list(runs)
+    if any(outcome.pr_merged or outcome.state == RunState.DONE for outcome in outcomes):
         return RunState.DONE
-    if states:
-        return states[-1]
+    if outcomes:
+        return outcomes[-1].state
     return IntakeState.DISPATCHED

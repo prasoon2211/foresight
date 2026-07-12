@@ -87,5 +87,12 @@ def test_manual_signal_runs_to_awaiting_review_over_the_api(client: Client) -> N
         "create_sandbox",
         "launch_agent",
         "stream_events",
-        "destroy",
     ]
+    assert fake.sandbox_specs[0].labels == {
+        "run_id": str(created["run_id"]),
+        "repo": "acme/widgets",
+        "trigger": "manual",
+    }
+    assert fake.agent_launches[0].prompt == (
+        "Fix widget race\n\nTwo updates can overwrite one another."
+    )
