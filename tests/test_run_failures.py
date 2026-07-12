@@ -2,7 +2,7 @@ import pytest
 
 from core.intake import create_manual_signal
 from core.models import FailureReason, Org, Repo, ResultStatus, RunState
-from executor import AgentEvent, AgentResult, FakeExecutor
+from executor import AgentEvent, AgentResult, FakeExecutor, FakeExecutorScript
 from orchestration.run_orchestrator import orchestrate_run
 
 
@@ -16,7 +16,7 @@ def test_setup_failure_records_reason_and_output() -> None:
         body="The setup must run first.",
         enqueue_run=lambda run_id: run_id,
     )
-    fake = FakeExecutor(setup_failure="uv sync exited 1")
+    fake = FakeExecutor(FakeExecutorScript(setup_failure="uv sync exited 1"))
 
     orchestrate_run(run.pk, fake)
 
@@ -37,7 +37,7 @@ def test_sandbox_death_mid_stream_records_reason_and_tears_down() -> None:
         body="The sandbox disappears.",
         enqueue_run=lambda run_id: run_id,
     )
-    fake = FakeExecutor(sandbox_dies=True)
+    fake = FakeExecutor(FakeExecutorScript(sandbox_dies=True))
 
     orchestrate_run(run.pk, fake)
 
@@ -57,7 +57,7 @@ def test_agent_session_error_records_reason_and_tears_down() -> None:
         body="The agent runtime errors.",
         enqueue_run=lambda run_id: run_id,
     )
-    fake = FakeExecutor([[AgentEvent(kind="session.error")]])
+    fake = FakeExecutor(FakeExecutorScript(event_batches=[[AgentEvent(kind="session.error")]]))
 
     orchestrate_run(run.pk, fake)
 
@@ -135,7 +135,7 @@ def test_idle_session_without_result_records_reason_and_tears_down() -> None:
         body="The agent goes idle without reporting.",
         enqueue_run=lambda run_id: run_id,
     )
-    fake = FakeExecutor([[AgentEvent(kind="session.idle")]])
+    fake = FakeExecutor(FakeExecutorScript(event_batches=[[AgentEvent(kind="session.idle")]]))
 
     orchestrate_run(run.pk, fake)
 

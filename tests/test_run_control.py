@@ -3,7 +3,7 @@ from django.test import Client
 
 from core.intake import create_manual_signal
 from core.models import FailureReason, Org, Repo, RunState
-from executor import FakeExecutor
+from executor import FakeExecutor, FakeExecutorScript
 from orchestration.executor_backend import use_executor
 from orchestration.run_orchestrator import orchestrate_run
 
@@ -23,7 +23,7 @@ def test_stop_running_run_via_api_cancels_and_tears_down(client: Client) -> None
     def stop_while_streaming() -> None:
         stop_responses.append(client.post(f"/api/runs/{run.pk}/stop"))
 
-    fake = FakeExecutor(before_stream=stop_while_streaming)
+    fake = FakeExecutor(FakeExecutorScript(before_stream=stop_while_streaming))
     with use_executor(fake):
         orchestrate_run(run.pk, fake)
 
@@ -61,7 +61,7 @@ def test_stop_during_sandbox_creation_destroys_newly_created_sandbox(
         response = client.post(f"/api/runs/{run.pk}/stop")
         assert response.status_code == 200
 
-    fake = FakeExecutor(after_create=stop_after_creation)
+    fake = FakeExecutor(FakeExecutorScript(after_create=stop_after_creation))
     with use_executor(fake):
         orchestrate_run(run.pk, fake)
 
@@ -87,7 +87,7 @@ def test_stop_during_agent_launch_stays_canceled(client: Client) -> None:
         response = client.post(f"/api/runs/{run.pk}/stop")
         assert response.status_code == 200
 
-    fake = FakeExecutor(after_launch=stop_after_launch)
+    fake = FakeExecutor(FakeExecutorScript(after_launch=stop_after_launch))
     with use_executor(fake):
         orchestrate_run(run.pk, fake)
 
@@ -107,7 +107,7 @@ def test_rerun_via_api_creates_fresh_run_and_sandbox(client: Client) -> None:
         body="Try again from scratch.",
         enqueue_run=lambda run_id: run_id,
     )
-    fake = FakeExecutor(interrupt_before_stream_once=True)
+    fake = FakeExecutor(FakeExecutorScript(interrupt_before_stream_once=True))
     with pytest.raises(RuntimeError, match="worker interrupted"):
         orchestrate_run(old_run.pk, fake)
     with use_executor(fake):

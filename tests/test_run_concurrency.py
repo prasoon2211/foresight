@@ -7,7 +7,7 @@ from procrastinate.contrib.django import app
 
 from core.intake import create_manual_signal
 from core.models import Org, Repo, RunState
-from executor import FakeExecutor
+from executor import FakeExecutor, FakeExecutorScript
 from orchestration.executor_backend import use_executor
 from orchestration.run_orchestrator import orchestrate_run
 from orchestration.tasks import enqueue_run_orchestrator
@@ -27,7 +27,7 @@ def test_queued_run_starts_automatically_when_org_slot_frees() -> None:
         body="Occupy the only slot.",
         enqueue_run=lambda run_id: run_id,
     )
-    fake = FakeExecutor(interrupt_before_stream_once=True)
+    fake = FakeExecutor(FakeExecutorScript(interrupt_before_stream_once=True))
     with pytest.raises(RuntimeError, match="worker interrupted"):
         orchestrate_run(first.pk, fake)
 

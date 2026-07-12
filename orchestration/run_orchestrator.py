@@ -7,7 +7,7 @@ from core.run_control import fail_run
 from executor import (
     AgentLaunch,
     AgentSession,
-    Executor,
+    DurableExecutor,
     SandboxDied,
     SandboxHandle,
     SandboxSpec,
@@ -20,7 +20,7 @@ class RunJobOutcome(StrEnum):
     POSTPONED = "postponed"
 
 
-def orchestrate_run(run_id: int, executor: Executor) -> RunJobOutcome:
+def orchestrate_run(run_id: int, executor: DurableExecutor) -> RunJobOutcome:
     """Advance one run, checkpointing each learned fact before continuing."""
     run = Run.objects.select_related("signal__repo", "signal__org").get(pk=run_id)
     if run.state in {RunState.AWAITING_REVIEW, RunState.DONE, RunState.FAILED}:
@@ -28,9 +28,7 @@ def orchestrate_run(run_id: int, executor: Executor) -> RunJobOutcome:
 
     if not run.sandbox_id and run.state == RunState.PROVISIONING:
         matching_sandboxes = [
-            sandbox
-            for sandbox in executor.list_sandboxes()
-            if sandbox.labels.get("run_id") == str(run.pk)
+            sandbox for sandbox in executor.list_sandboxes() if sandbox.run_id == run.pk
         ]
         if matching_sandboxes:
             run.refresh_from_db(fields=["state"])
@@ -51,6 +49,8 @@ def orchestrate_run(run_id: int, executor: Executor) -> RunJobOutcome:
                     .select_related("signal__repo", "signal__org")
                     .get(pk=run_id)
                 )
+                if run.state != RunState.QUEUED:
+                    return RunJobOutcome.FINISHED
                 org = Org.objects.select_for_update().get(pk=run.signal.org_id)
                 occupied_slots = Run.objects.filter(
                     signal__org_id=org.pk,

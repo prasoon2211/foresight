@@ -2,7 +2,7 @@ import pytest
 
 from core.intake import create_manual_signal
 from core.models import Org, Repo, RunState
-from executor import FakeExecutor
+from executor import FakeExecutor, FakeExecutorScript
 from orchestration.run_orchestrator import orchestrate_run
 
 
@@ -16,7 +16,7 @@ def test_reinvocation_after_unrecorded_sandbox_creation_recovers_same_sandbox() 
         body="Resume after worker death.",
         enqueue_run=lambda run_id: run_id,
     )
-    fake = FakeExecutor(interrupt_after_create_once=True)
+    fake = FakeExecutor(FakeExecutorScript(interrupt_after_create_once=True))
 
     with pytest.raises(RuntimeError, match="worker interrupted"):
         orchestrate_run(run.pk, fake)
@@ -40,7 +40,7 @@ def test_reinvocation_after_unrecorded_agent_launch_recovers_same_session() -> N
         body="Resync after worker death.",
         enqueue_run=lambda run_id: run_id,
     )
-    fake = FakeExecutor(interrupt_after_launch_once=True)
+    fake = FakeExecutor(FakeExecutorScript(interrupt_after_launch_once=True))
 
     with pytest.raises(RuntimeError, match="worker interrupted"):
         orchestrate_run(run.pk, fake)

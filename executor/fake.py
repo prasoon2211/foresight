@@ -1,6 +1,6 @@
 from collections import deque
 from collections.abc import Callable, Iterable, Iterator
-from dataclasses import replace
+from dataclasses import dataclass, replace
 
 from executor.protocol import (
     AgentEvent,
@@ -23,35 +23,42 @@ DEFAULT_RESULT = AgentResult(
 )
 
 
+@dataclass(frozen=True)
+class FakeExecutorScript:
+    event_batches: Iterable[Iterable[AgentEvent]] | None = None
+    setup_failure: str | None = None
+    sandbox_dies: bool = False
+    interrupt_before_launch_once: bool = False
+    interrupt_before_stream_once: bool = False
+    interrupt_after_create_once: bool = False
+    interrupt_after_launch_once: bool = False
+    before_stream: Callable[[], None] | None = None
+    after_create: Callable[[], None] | None = None
+    after_launch: Callable[[], None] | None = None
+
+
 class FakeExecutor:
     """Scriptable, in-memory implementation of the executor boundary."""
 
     def __init__(
         self,
-        scripts: Iterable[Iterable[AgentEvent]] | None = None,
+        script: FakeExecutorScript | None = None,
         *,
-        setup_failure: str | None = None,
-        sandbox_dies: bool = False,
-        interrupt_before_launch_once: bool = False,
-        interrupt_before_stream_once: bool = False,
-        interrupt_after_create_once: bool = False,
-        interrupt_after_launch_once: bool = False,
         inventory: Iterable[SandboxRecord] = (),
-        before_stream: Callable[[], None] | None = None,
-        after_create: Callable[[], None] | None = None,
-        after_launch: Callable[[], None] | None = None,
     ) -> None:
-        self._scripts = deque([list(script) for script in scripts] if scripts else [])
-        self._use_default_script = scripts is None
-        self._setup_failure = setup_failure
-        self._sandbox_dies = sandbox_dies
-        self._interrupt_before_launch_once = interrupt_before_launch_once
-        self._interrupt_before_stream_once = interrupt_before_stream_once
-        self._interrupt_after_create_once = interrupt_after_create_once
-        self._interrupt_after_launch_once = interrupt_after_launch_once
-        self._before_stream = before_stream
-        self._after_create = after_create
-        self._after_launch = after_launch
+        script = script or FakeExecutorScript()
+        event_batches = script.event_batches
+        self._scripts = deque([list(events) for events in event_batches] if event_batches else [])
+        self._use_default_script = event_batches is None
+        self._setup_failure = script.setup_failure
+        self._sandbox_dies = script.sandbox_dies
+        self._interrupt_before_launch_once = script.interrupt_before_launch_once
+        self._interrupt_before_stream_once = script.interrupt_before_stream_once
+        self._interrupt_after_create_once = script.interrupt_after_create_once
+        self._interrupt_after_launch_once = script.interrupt_after_launch_once
+        self._before_stream = script.before_stream
+        self._after_create = script.after_create
+        self._after_launch = script.after_launch
         self._next_sandbox = 1
         self._next_session = 1
         self._destroyed: set[str] = set()
@@ -64,7 +71,9 @@ class FakeExecutor:
 
     @classmethod
     def succeeding(cls, result: AgentResult) -> "FakeExecutor":
-        return cls([[AgentEvent(kind="session.idle", result=result)]])
+        return cls(
+            FakeExecutorScript(event_batches=[[AgentEvent(kind="session.idle", result=result)]])
+        )
 
     def create_sandbox(self, spec: SandboxSpec) -> SandboxHandle:
         self.calls.append("create_sandbox")

@@ -1,6 +1,7 @@
 import logging
 
 from django.db import connection
+from django.utils import timezone
 from procrastinate.contrib.django import app
 
 from orchestration.executor_backend import get_executor
@@ -43,3 +44,13 @@ def enqueue_run_orchestrator(run_id: int) -> int:
 def reconciliation_sweep(timestamp: int) -> None:
     del timestamp
     reconcile_sandboxes(get_executor())
+
+
+@app.periodic(cron="* * * * *")
+@app.task
+async def requeue_stalled_run_jobs(timestamp: int) -> None:
+    del timestamp
+    stalled_jobs = await app.job_manager.get_stalled_jobs(task_name=run_orchestrator.name)
+    for job in stalled_jobs:
+        if job.id is not None:
+            await app.job_manager.retry_job(job=job, retry_at=timezone.now())

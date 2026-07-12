@@ -45,6 +45,11 @@ class SandboxRecord:
     handle: SandboxHandle
     labels: dict[str, str]
 
+    @property
+    def run_id(self) -> int | None:
+        value = self.labels.get("run_id", "")
+        return int(value) if value.isdigit() else None
+
 
 @dataclass(frozen=True)
 class AgentLaunch:
@@ -111,4 +116,10 @@ class Executor(Protocol):
 
     def destroy(self, handle: SandboxHandle) -> None: ...
 
+
+class SandboxInventory(Protocol):
     def list_sandboxes(self) -> list[SandboxRecord]: ...
+
+
+class DurableExecutor(Executor, SandboxInventory, Protocol):
+    """Executor plus provider-wide inventory used for recovery and reconciliation."""
