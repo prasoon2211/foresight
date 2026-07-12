@@ -11,10 +11,14 @@
       "mergedAt": "2026-07-12T16:07:26.204Z"
     },
     "11": {
-      "status": "launched",
+      "status": "merged",
       "agentId": "bc-3dcada8a-4d6f-4402-9d4b-1ca4ce20d9b5",
       "runId": "run-6f0f434a-67a7-485c-8be0-3950e8b0529d",
-      "launchedAt": "2026-07-12T15:51:49.675Z"
+      "launchedAt": "2026-07-12T15:51:49.675Z",
+      "prUrl": "https://github.com/prasoon2211/foresight/pull/7",
+      "branch": "cursor/github-issue-to-run-d9b5",
+      "finishedAt": "2026-07-12T16:19:11.252Z",
+      "mergedAt": "2026-07-12T16:33:12.473Z"
     },
     "07": {
       "status": "merged",
