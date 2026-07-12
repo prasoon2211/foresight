@@ -90,6 +90,46 @@ def test_manual_snapshot_rebuild_reports_status_and_build_output(
 
 
 @pytest.mark.django_db(transaction=True)
+def test_failed_snapshot_build_records_provider_output(
+    admin_repo: tuple[Client, Repo],
+) -> None:
+    client, repo = admin_repo
+    fake = FakeExecutor(FakeExecutorScript(snapshot_failure="base image is unavailable"))
+
+    with use_executor(fake):
+        response = client.post(f"/api/orgs/{repo.org_id}/repos/{repo.id}/snapshots")
+        assert response.status_code == 202
+        run_jobs()
+
+    repo.refresh_from_db()
+    assert repo.snapshot_build_status == SnapshotBuildStatus.FAILED
+    assert repo.snapshot_build_output == "base image is unavailable"
+
+
+@pytest.mark.django_db
+def test_manual_signal_api_explains_snapshot_gate(
+    admin_repo: tuple[Client, Repo],
+) -> None:
+    client, repo = admin_repo
+    repo.snapshot_build_status = SnapshotBuildStatus.BUILDING
+    repo.save(update_fields=["snapshot_build_status"])
+
+    response = client.post(
+        f"/api/orgs/{repo.org_id}/signals",
+        data={
+            "repo_id": repo.pk,
+            "title": "Fix widget race",
+            "body": "Two updates can overwrite one another.",
+        },
+        content_type="application/json",
+    )
+
+    assert response.status_code == 409
+    assert response.json()["code"] == "snapshot_not_ready"
+    assert "building" in response.json()["message"]
+
+
+@pytest.mark.django_db(transaction=True)
 def test_changing_base_image_automatically_rebuilds_snapshot(
     admin_repo: tuple[Client, Repo],
 ) -> None:
