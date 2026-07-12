@@ -16,26 +16,24 @@ if (!t?.agentId) {
 const apiKey = process.env.CURSOR_API_KEY;
 
 let lastStatus = "";
+let run;
 for (;;) {
-  let info;
   try {
-    info = await Agent.get(t.agentId, { apiKey });
+    run = await Agent.getRun(t.runId, { runtime: "cloud", agentId: t.agentId, apiKey });
   } catch (err) {
-    console.log(`[${new Date().toISOString()}] Agent.get error: ${err}`);
+    console.log(`[${new Date().toISOString()}] Agent.getRun error: ${err}`);
     await sleep(intervalS * 1000);
     continue;
   }
-  if (info.status !== lastStatus) {
-    console.log(`[${new Date().toISOString()}] status: ${info.status}`);
-    lastStatus = info.status;
+  if (run.status !== lastStatus) {
+    console.log(`[${new Date().toISOString()}] run status: ${run.status}`);
+    lastStatus = run.status;
   }
-  if (info.status && info.status !== "running") break;
+  if (run.status && run.status !== "running") break;
   await sleep(intervalS * 1000);
 }
 
-// Terminal: fetch the run for result + git info.
 try {
-  const run = await Agent.getRun(t.runId, { runtime: "cloud", agentId: t.agentId, apiKey });
   console.log("--- run status:", run.status);
   if (run.git?.branches?.length) {
     for (const b of run.git.branches) {
