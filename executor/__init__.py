@@ -1,1 +1,29 @@
 """Sandbox and agent-session boundary."""
+
+from executor.fake import FakeExecutor
+from executor.protocol import (
+    AgentEvent,
+    AgentLaunch,
+    AgentResult,
+    AgentSession,
+    AttachEndpoints,
+    EnvFile,
+    Executor,
+    Resources,
+    SandboxHandle,
+    SandboxSpec,
+)
+
+__all__ = [
+    "AgentEvent",
+    "AgentLaunch",
+    "AgentResult",
+    "AgentSession",
+    "AttachEndpoints",
+    "EnvFile",
+    "Executor",
+    "FakeExecutor",
+    "Resources",
+    "SandboxHandle",
+    "SandboxSpec",
+]

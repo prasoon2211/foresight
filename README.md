@@ -31,3 +31,24 @@ uv run mypy .
 ```
 
 The tests use real Postgres and execute queued Procrastinate jobs in-process.
+
+## Manual signal tracer
+
+With `docker compose up` running, load the minimal org and repo fixture once:
+
+```bash
+docker compose exec web python manage.py loaddata demo
+```
+
+Create a manual signal, then poll the returned run ID:
+
+```bash
+curl --fail-with-body -X POST http://localhost:8000/api/signals \
+  -H 'Content-Type: application/json' \
+  -d '{"repo_id":1,"title":"Fix the widget","body":"The widget is broken."}'
+
+curl --fail-with-body http://localhost:8000/api/runs/1
+```
+
+The worker advances the run from `queued` through `provisioning` and `running` to
+`awaiting_review`, with a deterministic structured result supplied by the fake executor.

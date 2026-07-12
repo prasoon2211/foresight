@@ -1,6 +1,9 @@
 from ninja import NinjaAPI, Schema
 
+from api.routes import router
+
 api = NinjaAPI(title="Foresight API", version="1.0.0")
+api.add_router("", router)
 
 
 class HealthResponse(Schema):

@@ -1,0 +1,20 @@
+[
+  {
+    "model": "core.org",
+    "pk": 1,
+    "fields": {
+      "name": "Foresight Demo",
+      "created_at": "2026-07-12T00:00:00Z"
+    }
+  },
+  {
+    "model": "core.repo",
+    "pk": 1,
+    "fields": {
+      "org": 1,
+      "full_name": "foresight/demo",
+      "default_branch": "main",
+      "created_at": "2026-07-12T00:00:00Z"
+    }
+  }
+]
