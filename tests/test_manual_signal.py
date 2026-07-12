@@ -64,6 +64,8 @@ def test_manual_signal_runs_to_awaiting_review_over_the_api(client: Client) -> N
         "id": created["run_id"],
         "signal_id": created["id"],
         "state": RunState.AWAITING_REVIEW,
+        "failure_reason": "",
+        "failure_detail": "",
         "result": {
             "status": ResultStatus.PR_OPENED,
             "pr_url": "https://github.com/acme/widgets/pull/17",

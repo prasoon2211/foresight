@@ -10,8 +10,11 @@ from executor.protocol import (
     EnvFile,
     Executor,
     Resources,
+    SandboxDied,
     SandboxHandle,
+    SandboxRecord,
     SandboxSpec,
+    SetupFailed,
 )
 
 __all__ = [
@@ -24,6 +27,9 @@ __all__ = [
     "Executor",
     "FakeExecutor",
     "Resources",
+    "SandboxDied",
     "SandboxHandle",
+    "SandboxRecord",
     "SandboxSpec",
+    "SetupFailed",
 ]

@@ -4,7 +4,8 @@ from django.db import connection
 from procrastinate.contrib.django import app
 
 from orchestration.executor_backend import get_executor
-from orchestration.run_orchestrator import orchestrate_run
+from orchestration.reconciliation import reconcile_sandboxes
+from orchestration.run_orchestrator import OrchestrationOutcome, orchestrate_run
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +25,9 @@ def enqueue_demo_job(*, message: str) -> int:
 
 @app.task
 def run_orchestrator(run_id: int) -> None:
-    orchestrate_run(run_id, get_executor())
+    outcome = orchestrate_run(run_id, get_executor())
+    if outcome == OrchestrationOutcome.POSTPONED:
+        run_orchestrator.configure(schedule_in={"seconds": 1}).defer(run_id=run_id)
 
 
 def enqueue_run_orchestrator(run_id: int) -> int:
@@ -33,3 +36,10 @@ def enqueue_run_orchestrator(run_id: int) -> int:
         raise RuntimeError("run orchestrators must be enqueued inside transaction.atomic()")
 
     return run_orchestrator.defer(run_id=run_id)
+
+
+@app.periodic(cron="*/5 * * * *")
+@app.task
+def reconciliation_sweep(timestamp: int) -> None:
+    del timestamp
+    reconcile_sandboxes(get_executor())

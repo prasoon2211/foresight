@@ -10,12 +10,35 @@ from api.schemas import (
     RunResultOut,
     SignalOut,
 )
-from core.intake import create_manual_signal
+from core.intake import create_manual_signal, rerun_signal
 from core.models import Repo, Run, Signal
 from core.outcome import RunOutcome, derive_outcome_status
+from core.run_control import stop_run
+from orchestration.executor_backend import get_executor
 from orchestration.tasks import enqueue_run_orchestrator
 
 router = Router(tags=["signals", "runs"])
+
+
+def _run_out(run: Run) -> RunOut:
+    result = None
+    if run.result_status:
+        if run.confidence is None:
+            raise RuntimeError("completed run result is missing confidence")
+        result = RunResultOut(
+            status=run.result_status,
+            pr_url=run.pr_url,
+            summary=run.summary,
+            confidence=run.confidence,
+        )
+    return RunOut(
+        id=run.pk,
+        signal_id=run.signal_id,
+        state=run.state,
+        failure_reason=run.failure_reason,
+        failure_detail=run.failure_detail,
+        result=result,
+    )
 
 
 @router.post("/signals", response={201: CreatedSignalOut})
@@ -64,19 +87,17 @@ def list_signals(request: HttpRequest) -> list[SignalOut]:
 @router.get("/runs/{run_id}", response=RunOut)
 def get_run(request: HttpRequest, run_id: int) -> RunOut:
     run = get_object_or_404(Run, pk=run_id)
-    result = None
-    if run.result_status:
-        if run.confidence is None:
-            raise RuntimeError("completed run result is missing confidence")
-        result = RunResultOut(
-            status=run.result_status,
-            pr_url=run.pr_url,
-            summary=run.summary,
-            confidence=run.confidence,
-        )
-    return RunOut(
-        id=run.pk,
-        signal_id=run.signal_id,
-        state=run.state,
-        result=result,
-    )
+    return _run_out(run)
+
+
+@router.post("/runs/{run_id}/stop", response=RunOut)
+def stop_running_run(request: HttpRequest, run_id: int) -> RunOut:
+    run = get_object_or_404(Run, pk=run_id)
+    return _run_out(stop_run(run=run, executor=get_executor()))
+
+
+@router.post("/signals/{signal_id}/rerun", response={201: RunOut})
+def rerun(request: HttpRequest, signal_id: int) -> Status[RunOut]:
+    signal = get_object_or_404(Signal, pk=signal_id)
+    run = rerun_signal(signal=signal, enqueue_run=enqueue_run_orchestrator)
+    return Status(201, _run_out(run))

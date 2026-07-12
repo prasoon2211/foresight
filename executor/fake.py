@@ -1,5 +1,5 @@
 from collections import deque
-from collections.abc import Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from dataclasses import replace
 
 from executor.protocol import (
@@ -8,8 +8,11 @@ from executor.protocol import (
     AgentResult,
     AgentSession,
     AttachEndpoints,
+    SandboxDied,
     SandboxHandle,
+    SandboxRecord,
     SandboxSpec,
+    SetupFailed,
 )
 
 DEFAULT_RESULT = AgentResult(
@@ -23,12 +26,28 @@ DEFAULT_RESULT = AgentResult(
 class FakeExecutor:
     """Scriptable, in-memory implementation of the executor boundary."""
 
-    def __init__(self, scripts: Iterable[Iterable[AgentEvent]] | None = None) -> None:
+    def __init__(
+        self,
+        scripts: Iterable[Iterable[AgentEvent]] | None = None,
+        *,
+        setup_failure: str | None = None,
+        sandbox_dies: bool = False,
+        interrupt_before_launch_once: bool = False,
+        interrupt_before_stream_once: bool = False,
+        inventory: Iterable[SandboxRecord] = (),
+        before_stream: Callable[[], None] | None = None,
+    ) -> None:
         self._scripts = deque([list(script) for script in scripts] if scripts else [])
         self._use_default_script = scripts is None
+        self._setup_failure = setup_failure
+        self._sandbox_dies = sandbox_dies
+        self._interrupt_before_launch_once = interrupt_before_launch_once
+        self._interrupt_before_stream_once = interrupt_before_stream_once
+        self._before_stream = before_stream
         self._next_sandbox = 1
         self._next_session = 1
         self._destroyed: set[str] = set()
+        self._inventory = {item.handle.sandbox_id: item for item in inventory}
         self.calls: list[str] = []
         self.sandbox_specs: list[SandboxSpec] = []
         self.agent_launches: list[AgentLaunch] = []
@@ -41,8 +60,14 @@ class FakeExecutor:
     def create_sandbox(self, spec: SandboxSpec) -> SandboxHandle:
         self.calls.append("create_sandbox")
         self.sandbox_specs.append(spec)
+        if self._setup_failure is not None:
+            raise SetupFailed(self._setup_failure)
         handle = SandboxHandle(sandbox_id=f"fake-sandbox-{self._next_sandbox}")
         self._next_sandbox += 1
+        self._inventory[handle.sandbox_id] = SandboxRecord(
+            handle=handle,
+            labels=dict(spec.labels),
+        )
         return handle
 
     def launch_agent(
@@ -50,6 +75,9 @@ class FakeExecutor:
         handle: SandboxHandle,
         launch: AgentLaunch,
     ) -> AgentSession:
+        if self._interrupt_before_launch_once:
+            self._interrupt_before_launch_once = False
+            raise RuntimeError("worker interrupted")
         self.calls.append("launch_agent")
         self.agent_launches.append(launch)
         session = AgentSession(
@@ -79,8 +107,15 @@ class FakeExecutor:
         handle: SandboxHandle,
         session: AgentSession,
     ) -> Iterator[AgentEvent]:
+        if self._interrupt_before_stream_once:
+            self._interrupt_before_stream_once = False
+            raise RuntimeError("worker interrupted")
         self.calls.append("stream_events")
         self.streamed_sessions.append(session)
+        if self._before_stream is not None:
+            self._before_stream()
+        if self._sandbox_dies:
+            raise SandboxDied
         if self._scripts:
             events = self._scripts.popleft()
         elif self._use_default_script:
@@ -96,3 +131,8 @@ class FakeExecutor:
     def destroy(self, handle: SandboxHandle) -> None:
         self.calls.append("destroy")
         self._destroyed.add(handle.sandbox_id)
+        self._inventory.pop(handle.sandbox_id, None)
+
+    def list_sandboxes(self) -> list[SandboxRecord]:
+        self.calls.append("list_sandboxes")
+        return list(self._inventory.values())

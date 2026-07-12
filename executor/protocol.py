@@ -3,6 +3,16 @@ from dataclasses import dataclass
 from typing import Protocol
 
 
+class SetupFailed(Exception):
+    def __init__(self, detail: str) -> None:
+        super().__init__(detail)
+        self.detail = detail
+
+
+class SandboxDied(Exception):
+    pass
+
+
 @dataclass(frozen=True)
 class EnvFile:
     target_path: str
@@ -28,6 +38,12 @@ class SandboxSpec:
 @dataclass(frozen=True)
 class SandboxHandle:
     sandbox_id: str
+
+
+@dataclass(frozen=True)
+class SandboxRecord:
+    handle: SandboxHandle
+    labels: dict[str, str]
 
 
 @dataclass(frozen=True)
@@ -90,3 +106,5 @@ class Executor(Protocol):
     ) -> Iterator[AgentEvent]: ...
 
     def destroy(self, handle: SandboxHandle) -> None: ...
+
+    def list_sandboxes(self) -> list[SandboxRecord]: ...

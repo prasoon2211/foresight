@@ -35,9 +35,28 @@ class ResultStatus(models.TextChoices):
     BLOCKED = "blocked", "Blocked"
 
 
+class FailureReason(models.TextChoices):
+    SETUP_FAILED = "setup_failed", "Setup failed"
+    SANDBOX_DIED = "sandbox_died", "Sandbox died"
+    AGENT_ERROR = "agent_error", "Agent error"
+    AGENT_REPORTED_FAILED = "agent_reported_failed", "Agent reported failed"
+    AGENT_REPORTED_BLOCKED = "agent_reported_blocked", "Agent reported blocked"
+    NO_RESULT = "no_result", "No result"
+    CANCELED = "canceled", "Canceled"
+
+
 class Org(models.Model):
     name = models.CharField(max_length=200)
+    concurrency_cap = models.PositiveIntegerField(default=1)
     created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(concurrency_cap__gte=1),
+                name="org_concurrency_cap_at_least_one",
+            )
+        ]
 
     def __str__(self) -> str:
         return self.name
@@ -105,6 +124,8 @@ class Run(models.Model):
     summary = models.TextField(blank=True)
     confidence = models.FloatField(null=True, blank=True)
     pr_merged_at = models.DateTimeField(null=True, blank=True)
+    failure_reason = models.CharField(max_length=40, choices=FailureReason, blank=True)
+    failure_detail = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
