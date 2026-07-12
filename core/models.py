@@ -1,4 +1,7 @@
+from django.conf import settings
+from django.core.validators import MinValueValidator
 from django.db import models
+from encrypted_fields.fields import EncryptedJSONField, EncryptedTextField
 
 
 class IntakeState(models.TextChoices):
@@ -37,16 +40,74 @@ class ResultStatus(models.TextChoices):
 
 class Org(models.Model):
     name = models.CharField(max_length=200)
+    agent_api_key = EncryptedTextField(blank=True, null=True)
+    agent_base_url = EncryptedTextField(blank=True, null=True)
+    concurrency_cap = models.PositiveIntegerField(
+        default=3,
+        validators=[MinValueValidator(1)],
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self) -> str:
         return self.name
+
+    def agent_credentials(self) -> dict[str, str]:
+        credentials: dict[str, str] = {}
+        if self.agent_api_key:
+            credentials["ANTHROPIC_API_KEY"] = self.agent_api_key
+        if self.agent_base_url:
+            credentials["ANTHROPIC_BASE_URL"] = self.agent_base_url
+        return credentials
+
+
+class OrgMembership(models.Model):
+    class Role(models.TextChoices):
+        ADMIN = "admin", "Admin"
+        MEMBER = "member", "Member"
+
+    org = models.ForeignKey(Org, on_delete=models.CASCADE, related_name="memberships")
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="org_memberships",
+    )
+    role = models.CharField(max_length=20, choices=Role)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["org", "user"],
+                name="unique_org_membership",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.user} in {self.org}"
+
+
+class ApiToken(models.Model):
+    org = models.ForeignKey(Org, on_delete=models.CASCADE, related_name="api_tokens")
+    name = models.CharField(max_length=200)
+    prefix = models.CharField(max_length=12, unique=True)
+    secret_hash = models.CharField(max_length=128)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="created_api_tokens",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    revoked_at = models.DateTimeField(null=True, blank=True)
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.org})"
 
 
 class Repo(models.Model):
     org = models.ForeignKey(Org, on_delete=models.CASCADE, related_name="repos")
     full_name = models.CharField(max_length=255)
     default_branch = models.CharField(max_length=255, default="main")
+    env = EncryptedJSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

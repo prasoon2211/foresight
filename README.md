@@ -32,22 +32,24 @@ uv run mypy .
 
 The tests use real Postgres and execute queued Procrastinate jobs in-process.
 
-## Manual signal tracer
+## Authentication and manual signal tracer
 
-With `docker compose up` running, load the minimal org and repo fixture once:
+Identity endpoints are served by django-allauth headless under
+`/_allauth/browser/v1/`. After email verification, create an org through
+`POST /api/orgs`, then mint an org API token through
+`POST /api/orgs/{org_id}/api-tokens`. The plaintext token is returned only by
+that create request.
+
+Use that token to create a manual signal, then poll the returned run ID:
 
 ```bash
-docker compose exec web python manage.py loaddata demo
-```
-
-Create a manual signal, then poll the returned run ID:
-
-```bash
-curl --fail-with-body -X POST http://localhost:8000/api/signals \
+curl --fail-with-body -X POST http://localhost:8000/api/orgs/1/signals \
+  -H "Authorization: Bearer $FORESIGHT_API_TOKEN" \
   -H 'Content-Type: application/json' \
   -d '{"repo_id":1,"title":"Fix the widget","body":"The widget is broken."}'
 
-curl --fail-with-body http://localhost:8000/api/runs/1
+curl --fail-with-body http://localhost:8000/api/orgs/1/runs/1 \
+  -H "Authorization: Bearer $FORESIGHT_API_TOKEN"
 ```
 
 The worker advances the run from `queued` through `provisioning` and `running` to
