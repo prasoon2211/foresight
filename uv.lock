@@ -352,6 +352,7 @@ dependencies = [
     { name = "django-ninja" },
     { name = "procrastinate", extra = ["django"] },
     { name = "psycopg", extra = ["binary", "pool"] },
+    { name = "pyjwt", extra = ["crypto"] },
     { name = "uvicorn", extra = ["standard"] },
 ]
 
@@ -372,6 +373,7 @@ requires-dist = [
     { name = "django-ninja", specifier = ">=1.6.2" },
     { name = "procrastinate", extras = ["django"], specifier = ">=3.9.0" },
     { name = "psycopg", extras = ["binary", "pool"], specifier = ">=3.3.4" },
+    { name = "pyjwt", extras = ["crypto"], specifier = ">=2.13.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.51.0" },
 ]
 

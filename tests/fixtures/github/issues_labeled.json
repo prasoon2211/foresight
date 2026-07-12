@@ -1,0 +1,26 @@
+{
+  "action": "labeled",
+  "installation": {
+    "id": 12345678
+  },
+  "repository": {
+    "id": 1296269,
+    "name": "widgets",
+    "full_name": "acme/widgets",
+    "default_branch": "main"
+  },
+  "issue": {
+    "id": 987654321,
+    "number": 42,
+    "html_url": "https://github.com/acme/widgets/issues/42",
+    "title": "Fix widget race",
+    "body": "Two updates can overwrite one another."
+  },
+  "label": {
+    "name": "foresight"
+  },
+  "sender": {
+    "login": "developer",
+    "id": 2
+  }
+}

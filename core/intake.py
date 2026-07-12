@@ -3,9 +3,13 @@ from collections.abc import Callable
 
 from django.db import transaction
 
-from core.models import IntakeState, Repo, Run, Signal, SignalSource
+from core.models import ConnectionStatus, IntakeState, Repo, Run, Signal, SignalSource
 
 RunEnqueuer = Callable[[int], object]
+
+
+class StrandedSignal(Exception):
+    pass
 
 
 def create_manual_signal(
@@ -31,6 +35,11 @@ def dispatch_signal(*, signal: Signal, enqueue_run: RunEnqueuer) -> Run:
     """End intake and atomically publish a queued run."""
     if signal.intake_state != IntakeState.RECEIVED:
         raise ValueError("only received signals can be dispatched")
+    if (
+        Repo.objects.values_list("connection_status", flat=True).get(pk=signal.repo_id)
+        == ConnectionStatus.DISCONNECTED
+    ):
+        raise StrandedSignal("cannot dispatch a signal whose repo is disconnected")
 
     with transaction.atomic():
         run = Run.objects.create(

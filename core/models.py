@@ -1,7 +1,13 @@
 from django.conf import settings
 from django.core.validators import MinValueValidator
 from django.db import models
+from django.db.models.fields.json import KeyTextTransform
 from encrypted_fields.fields import EncryptedJSONField, EncryptedTextField
+
+DEFAULT_BASE_SNAPSHOT = "foresight/default"
+DEFAULT_HARNESS_PROMPT = """You are Foresight, an autonomous software engineer.
+Resolve the supplied signal in the connected repository, test the change, and open a pull request.
+"""
 
 
 class IntakeState(models.TextChoices):
@@ -36,6 +42,31 @@ class ResultStatus(models.TextChoices):
     PR_OPENED = "pr_opened", "PR opened"
     FAILED = "failed", "Failed"
     BLOCKED = "blocked", "Blocked"
+
+
+class FailureReason(models.TextChoices):
+    SETUP_FAILED = "setup_failed", "Setup failed"
+    SANDBOX_DIED = "sandbox_died", "Sandbox died"
+    AGENT_ERROR = "agent_error", "Agent error"
+    AGENT_REPORTED_FAILED = "agent_reported_failed", "Agent reported failed"
+    AGENT_REPORTED_BLOCKED = "agent_reported_blocked", "Agent reported blocked"
+    NO_RESULT = "no_result", "No result"
+    CANCELED = "canceled", "Canceled"
+
+
+class SurfaceType(models.TextChoices):
+    GITHUB = "github", "GitHub"
+
+
+class SurfaceConnectionStatus(models.TextChoices):
+    PENDING = "pending", "Pending"
+    ACTIVE = "active", "Active"
+    REVOKED = "revoked", "Revoked"
+
+
+class ConnectionStatus(models.TextChoices):
+    CONNECTED = "connected", "Connected"
+    DISCONNECTED = "disconnected", "Disconnected"
 
 
 class Org(models.Model):
@@ -103,10 +134,55 @@ class ApiToken(models.Model):
         return f"{self.name} ({self.org})"
 
 
+class SurfaceConnection(models.Model):
+    org = models.ForeignKey(
+        Org,
+        on_delete=models.CASCADE,
+        related_name="surface_connections",
+    )
+    type = models.CharField(max_length=30, choices=SurfaceType)
+    status = models.CharField(
+        max_length=20,
+        choices=SurfaceConnectionStatus,
+        default=SurfaceConnectionStatus.PENDING,
+    )
+    account_label = models.CharField(max_length=255)
+    identity = models.JSONField(default=dict)
+    credentials = EncryptedJSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                models.F("type"),
+                KeyTextTransform("installation_id", "identity"),
+                name="unique_surface_external_identity",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.type}: {self.account_label}"
+
+
 class Repo(models.Model):
     org = models.ForeignKey(Org, on_delete=models.CASCADE, related_name="repos")
+    surface_connection = models.ForeignKey(
+        SurfaceConnection,
+        on_delete=models.PROTECT,
+        related_name="repos",
+        null=True,
+        blank=True,
+    )
     full_name = models.CharField(max_length=255)
     default_branch = models.CharField(max_length=255, default="main")
+    connection_status = models.CharField(
+        max_length=20,
+        choices=ConnectionStatus,
+        default=ConnectionStatus.CONNECTED,
+    )
+    base_snapshot = models.CharField(max_length=500, default=DEFAULT_BASE_SNAPSHOT)
+    setup_script = models.TextField(default="", blank=True)
+    harness_prompt = models.TextField(default=DEFAULT_HARNESS_PROMPT)
     env = EncryptedJSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -125,6 +201,15 @@ class Repo(models.Model):
 class Signal(models.Model):
     org = models.ForeignKey(Org, on_delete=models.CASCADE, related_name="signals")
     repo = models.ForeignKey(Repo, on_delete=models.PROTECT, related_name="signals")
+    origin_connection = models.ForeignKey(
+        SurfaceConnection,
+        on_delete=models.PROTECT,
+        related_name="origin_signals",
+        null=True,
+        blank=True,
+    )
+    origin_reference = models.JSONField(default=dict, blank=True)
+    surface_state = models.JSONField(default=dict, blank=True)
     source = models.CharField(
         max_length=20,
         choices=SignalSource,
@@ -166,6 +251,7 @@ class Run(models.Model):
     summary = models.TextField(blank=True)
     confidence = models.FloatField(null=True, blank=True)
     pr_merged_at = models.DateTimeField(null=True, blank=True)
+    failure_reason = models.CharField(max_length=40, choices=FailureReason, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

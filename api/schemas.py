@@ -94,6 +94,7 @@ class SignalOut(Schema):
     body: str
     intake_state: str
     outcome_status: str
+    stranded: bool
 
 
 class RunResultOut(Schema):

@@ -92,6 +92,7 @@ def test_manual_signal_runs_to_awaiting_review_over_the_api(client: Client) -> N
             "body": "Two updates can overwrite one another.",
             "intake_state": "dispatched",
             "outcome_status": RunState.AWAITING_REVIEW,
+            "stranded": False,
         }
     ]
     assert fake.calls == [

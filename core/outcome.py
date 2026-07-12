@@ -1,13 +1,17 @@
 from collections.abc import Iterable
 from dataclasses import dataclass
 
-from core.models import IntakeState, RunState
+from core.models import ConnectionStatus, IntakeState, RunState
 
 
 @dataclass(frozen=True)
 class RunOutcome:
     state: RunState | str
     pr_merged: bool = False
+
+
+def derive_stranded(repo_connection_status: ConnectionStatus | str) -> bool:
+    return repo_connection_status == ConnectionStatus.DISCONNECTED
 
 
 def derive_outcome_status(

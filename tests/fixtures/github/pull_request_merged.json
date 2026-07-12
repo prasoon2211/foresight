@@ -1,0 +1,26 @@
+{
+  "action": "closed",
+  "installation": {
+    "id": 12345678
+  },
+  "repository": {
+    "id": 1296269,
+    "name": "widgets",
+    "full_name": "acme/widgets",
+    "default_branch": "main"
+  },
+  "pull_request": {
+    "id": 24681012,
+    "number": 17,
+    "html_url": "https://github.com/acme/widgets/pull/17",
+    "merged": true,
+    "merged_at": "2026-07-12T15:30:00Z",
+    "head": {
+      "ref": "foresight/signal-1"
+    }
+  },
+  "sender": {
+    "login": "reviewer",
+    "id": 3
+  }
+}

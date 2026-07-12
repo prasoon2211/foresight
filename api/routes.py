@@ -40,7 +40,7 @@ from core.organizations import (
     invite_org_member,
     update_org_settings,
 )
-from core.outcome import RunOutcome, derive_outcome_status
+from core.outcome import RunOutcome, derive_outcome_status, derive_stranded
 from orchestration.tasks import enqueue_run_orchestrator
 
 router = Router(tags=["orgs", "signals", "runs"])
@@ -80,6 +80,7 @@ def signal_out(signal: Signal) -> SignalOut:
                 )
             ),
         ),
+        stranded=derive_stranded(signal.repo.connection_status),
     )
 
 

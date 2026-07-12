@@ -6,6 +6,7 @@ from executor import (
     SandboxHandle,
     SandboxSpec,
 )
+from surfaces.github import notify_run_finished, notify_run_started
 
 
 def orchestrate_run(run_id: int, executor: Executor) -> None:
@@ -13,6 +14,8 @@ def orchestrate_run(run_id: int, executor: Executor) -> None:
     run = Run.objects.select_related("signal__repo", "signal__org").get(pk=run_id)
     if run.state in {RunState.AWAITING_REVIEW, RunState.DONE, RunState.FAILED}:
         return
+
+    notify_run_started(run)
 
     if not run.sandbox_id:
         if run.state == RunState.QUEUED:
@@ -91,3 +94,4 @@ def orchestrate_run(run_id: int, executor: Executor) -> None:
                 "updated_at",
             ]
         )
+        notify_run_finished(run)
