@@ -118,7 +118,9 @@ def test_real_daytona_smoke_contract(tmp_path: Path, monkeypatch: pytest.MonkeyP
         assert web_ui.status_code == 200
         assert "text/html" in web_ui.headers["content-type"]
         assert health.status_code == 200
-        assert health.headers["access-control-allow-origin"] == "http://localhost:8000"
+        assert {
+            origin.strip() for origin in health.headers["access-control-allow-origin"].split(",")
+        } == {"http://localhost:8000"}
         assert endpoints.terminal_ws.startswith("wss://")
         sandbox = Daytona().get(handle.sandbox_id)
         assert (sandbox.cpu, sandbox.memory, sandbox.disk) == (4, 8, 10)
