@@ -137,6 +137,7 @@ def test_real_daytona_smoke_contract(tmp_path: Path, monkeypatch: pytest.MonkeyP
         resized = pty.resize(PtySize(rows=40, cols=120))
         assert (resized.rows, resized.cols) == (40, 120)
         pty.disconnect()
+        sandbox = Daytona().get(handle.sandbox_id)
         pty = sandbox.process.connect_pty_session(pty_id)
         output: list[bytes] = []
         pty.send_input("printf pty-reconnected; exit\n")
