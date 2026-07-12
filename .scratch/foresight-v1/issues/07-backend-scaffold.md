@@ -6,7 +6,7 @@ Concretely, after this ticket: `docker compose up` yields web + worker + databas
 
 **Blocked by:** None — can start immediately.
 
-**Status:** ready-for-agent
+**Status:** claimed
 
 - [ ] `docker compose up` gives a healthy web (ASGI), worker (Procrastinate), and Postgres; all configuration via environment variables with a documented `.env.example`
 - [ ] Test suite green in CI, including one test that enqueues a job inside a transaction and executes it in-process against real Postgres
