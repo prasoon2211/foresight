@@ -1,4 +1,4 @@
-// Usage: node launch.mjs <NN>
+// Usage: node launch.mjs <NN> ["extra orchestrator note appended to the prompt"]
 // Launches one cloud worker agent for ticket NN and records it in state.json.
 import { Agent } from "@cursor/sdk";
 import { REPO_URL, TICKETS } from "./tickets.mjs";
@@ -22,7 +22,10 @@ if (!apiKey) {
   process.exit(1);
 }
 
-const prompt = buildWorkerPrompt(nn);
+const extraNote = process.argv[3];
+const prompt =
+  buildWorkerPrompt(nn) +
+  (extraNote ? `\n\n## Note from the orchestrator\n\n${extraNote}` : "");
 
 let agent, run;
 try {
