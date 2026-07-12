@@ -234,16 +234,17 @@ class DaytonaExecutor:
         handle: SandboxHandle,
         session: AgentSession,
     ) -> Iterator[AgentEvent]:
-        del handle
+        headers = self._preview_headers(handle)
         failures = 0
         while failures < 5:
-            if self._session_completed(session):
+            if self._session_completed(handle, session):
                 yield AgentEvent(kind="session.idle", session_id=session.session_id)
                 return
             try:
                 with self._http.stream(
                     "GET",
                     f"{session.base_url.rstrip('/')}/global/event",
+                    headers=headers,
                     auth=("opencode", session.server_password),
                     timeout=httpx.Timeout(connect=30, read=None, write=30, pool=30),
                 ) as response:
@@ -270,7 +271,7 @@ class DaytonaExecutor:
                 failures += 1
             else:
                 failures += 1
-            if self._session_completed(session):
+            if self._session_completed(handle, session):
                 yield AgentEvent(kind="session.idle", session_id=session.session_id)
                 return
             time.sleep(min(2**failures, 10))
@@ -281,9 +282,9 @@ class DaytonaExecutor:
         handle: SandboxHandle,
         session: AgentSession,
     ) -> list[AgentMessage]:
-        del handle
         response = self._http.get(
             f"{session.base_url.rstrip('/')}/session/{quote(session.session_id, safe='')}/message",
+            headers=self._preview_headers(handle),
             auth=("opencode", session.server_password),
         )
         response.raise_for_status()
@@ -397,20 +398,27 @@ class DaytonaExecutor:
                 return str(session["id"])
         return None
 
-    def _session_completed(self, session: AgentSession) -> bool:
+    def _session_completed(
+        self,
+        handle: SandboxHandle,
+        session: AgentSession,
+    ) -> bool:
         try:
             response = self._http.get(
                 f"{session.base_url.rstrip('/')}/session/status",
+                headers=self._preview_headers(handle),
                 auth=("opencode", session.server_password),
             )
             response.raise_for_status()
             status = response.json().get(session.session_id, {})
             status_type = status.get("type") if isinstance(status, dict) else status
-            return status_type == "idle" and bool(
-                self.get_session_messages(SandboxHandle(""), session)
-            )
-        except httpx.HTTPError:
+            return status_type == "idle" and bool(self.get_session_messages(handle, session))
+        except (DaytonaError, httpx.HTTPError):
             return False
+
+    def _preview_headers(self, handle: SandboxHandle) -> dict[str, str]:
+        preview = self._sandbox(handle).get_preview_link(AGENT_PORT)
+        return {"x-daytona-preview-token": preview.token}
 
     @staticmethod
     def _normalize_event(raw_data: str) -> AgentEvent | None:
