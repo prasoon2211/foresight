@@ -66,7 +66,18 @@ def orchestrate_run(run_id: int, executor: DurableExecutor) -> RunJobOutcome:
         if matching_sandboxes:
             run.refresh_from_db(fields=["state"])
             if run.state == RunState.FAILED:
-                for sandbox in matching_sandboxes:
+                retained = matching_sandboxes[0]
+                executor.archive(retained.handle)
+                run.sandbox_id = retained.handle.sandbox_id
+                run.sandbox_archived_at = timezone.now()
+                run.save(
+                    update_fields=[
+                        "sandbox_id",
+                        "sandbox_archived_at",
+                        "updated_at",
+                    ]
+                )
+                for sandbox in matching_sandboxes[1:]:
                     executor.destroy(sandbox.handle)
                 if surface_adapter is not None:
                     surface_adapter.notify_run_finished(run)
@@ -131,7 +142,16 @@ def orchestrate_run(run_id: int, executor: DurableExecutor) -> RunJobOutcome:
                 run.sandbox_id = handle.sandbox_id
                 run.save(update_fields=["sandbox_id", "updated_at"])
         if canceled:
-            executor.destroy(handle)
+            executor.archive(handle)
+            run.sandbox_id = handle.sandbox_id
+            run.sandbox_archived_at = timezone.now()
+            run.save(
+                update_fields=[
+                    "sandbox_id",
+                    "sandbox_archived_at",
+                    "updated_at",
+                ]
+            )
             if surface_adapter is not None:
                 surface_adapter.notify_run_finished(run)
             return RunJobOutcome.FINISHED
@@ -253,6 +273,14 @@ def orchestrate_run(run_id: int, executor: DurableExecutor) -> RunJobOutcome:
         )
 
     run.refresh_from_db()
+    if not run.session_export_path:
+        if session_messages is None:
+            session_messages = executor.get_session_messages(handle, session)
+        run.session_export_path = store_session_export(
+            run_id=run.pk,
+            messages=session_messages,
+        )
+        run.save(update_fields=["session_export_path", "updated_at"])
     if run.failure_reason == FailureReason.NO_RESULT:
         _fail_and_notify(
             run=run,
@@ -278,14 +306,6 @@ def orchestrate_run(run_id: int, executor: DurableExecutor) -> RunJobOutcome:
         )
         return RunJobOutcome.FINISHED
 
-    if not run.session_export_path:
-        if session_messages is None:
-            session_messages = executor.get_session_messages(handle, session)
-        run.session_export_path = store_session_export(
-            run_id=run.pk,
-            messages=session_messages,
-        )
-        run.save(update_fields=["session_export_path", "updated_at"])
     if run.sandbox_archived_at is None:
         executor.archive(handle)
         run.sandbox_archived_at = timezone.now()

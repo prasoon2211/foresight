@@ -1,18 +1,20 @@
 from django.db import transaction
+from django.utils import timezone
 
 from core.models import FailureReason, Run, RunState
-from executor import Executor, SandboxHandle
+from core.session_exports import store_session_export
+from executor import AgentSession, DurableExecutor, SandboxHandle
 
 
 def fail_run(
     *,
     run: Run,
-    executor: Executor,
+    executor: DurableExecutor,
     reason: FailureReason,
     detail: str = "",
     allowed_states: set[str] | None = None,
 ) -> Run:
-    """Persist a failed Run and idempotently tear down its sandbox."""
+    """Persist a failed Run, harvest its session, and retain its sandbox."""
     with transaction.atomic():
         run = Run.objects.select_for_update().get(pk=run.pk)
         if allowed_states is not None and run.state not in allowed_states:
@@ -23,13 +25,39 @@ def fail_run(
             run.failure_detail = detail
             run.save(update_fields=["state", "failure_reason", "failure_detail", "updated_at"])
 
-    if run.sandbox_id:
-        executor.destroy(SandboxHandle(sandbox_id=run.sandbox_id))
+    if not run.sandbox_id:
+        return run
+    handle = SandboxHandle(sandbox_id=run.sandbox_id)
+    if (
+        reason != FailureReason.SANDBOX_DIED
+        and run.agent_session_id
+        and not run.session_export_path
+    ):
+        session = AgentSession(
+            session_id=run.agent_session_id,
+            base_url=run.agent_base_url,
+            server_password=run.server_password,
+        )
+        try:
+            messages = executor.get_session_messages(handle, session)
+            run.session_export_path = store_session_export(
+                run_id=run.pk,
+                messages=messages,
+            )
+            run.save(update_fields=["session_export_path", "updated_at"])
+        except Exception:
+            pass
+    if reason == FailureReason.SANDBOX_DIED:
+        executor.destroy(handle)
+    elif run.sandbox_archived_at is None:
+        executor.archive(handle)
+        run.sandbox_archived_at = timezone.now()
+        run.save(update_fields=["sandbox_archived_at", "updated_at"])
     return run
 
 
-def stop_run(*, run: Run, executor: Executor) -> Run:
-    """Cancel an executing run and tear down its sandbox."""
+def stop_run(*, run: Run, executor: DurableExecutor) -> Run:
+    """Cancel an executing run and retain its sandbox."""
     return fail_run(
         run=run,
         executor=executor,

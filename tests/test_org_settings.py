@@ -79,6 +79,11 @@ def test_repo_env_is_encrypted_and_write_only(
         "full_name": "acme/widgets",
         "default_branch": "main",
         "has_env": True,
+        "base_snapshot": "node:22-bookworm",
+        "snapshot_build_status": "ready",
+        "snapshot_build_output": "",
+        "setup_verification_status": "not_run",
+        "setup_verification_output": "",
     }
     read = client.get(f"/api/orgs/{org.id}/repos/{repo.id}")
     assert read.json() == update.json()

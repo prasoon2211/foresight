@@ -22,6 +22,7 @@ from core.models import (
     RunState,
     Signal,
     SignalSource,
+    SnapshotBuildStatus,
     SurfaceConnection,
     SurfaceConnectionStatus,
     SurfaceType,
@@ -37,6 +38,16 @@ WEBHOOK_SECRET = "test-webhook-secret"
 
 class WorkerConnectorFactory(Protocol):
     def get_worker_connector(self) -> BaseAsyncConnector: ...
+
+
+def run_jobs() -> None:
+    connector = cast(WorkerConnectorFactory, app.connector)
+    with app.replace_connector(connector.get_worker_connector()):
+        app.run_worker(
+            wait=False,
+            install_signal_handlers=False,
+            listen_notify=False,
+        )
 
 
 def post_webhook(client: Client, event: str, fixture: str) -> HttpResponse:
@@ -105,7 +116,8 @@ def test_installation_webhooks_activate_connection_and_enable_selected_repos(
     assert repo.surface_connection == connection
     assert repo.connection_status == ConnectionStatus.CONNECTED
     assert repo.default_branch == "main"
-    assert repo.base_snapshot == "foresight/default"
+    assert repo.base_snapshot == "node:22-bookworm"
+    assert repo.snapshot_build_status == SnapshotBuildStatus.BUILDING
     assert repo.setup_script == ""
     assert repo.harness_prompt
 
@@ -143,6 +155,7 @@ def test_labeled_issue_runs_to_github_writeback_and_renotify_is_idempotent(
     fake_github = FakeGitHubClient()
 
     with use_executor(fake_executor), use_github_client(fake_github):
+        run_jobs()
         response = post_webhook(client, "issues", "issues_labeled.json")
         assert response.status_code == 202
         signal = Signal.objects.get()
@@ -156,13 +169,7 @@ def test_labeled_issue_runs_to_github_writeback_and_renotify_is_idempotent(
         }
         assert run.state == RunState.QUEUED
 
-        connector = cast(WorkerConnectorFactory, app.connector)
-        with app.replace_connector(connector.get_worker_connector()):
-            app.run_worker(
-                wait=False,
-                install_signal_handlers=False,
-                listen_notify=False,
-            )
+        run_jobs()
 
         run.refresh_from_db()
         signal.refresh_from_db()
@@ -243,6 +250,8 @@ def test_uninstall_strands_signals_and_reinstall_unstrands_them(client: Client) 
         "installation_repositories_added.json",
     )
     repo = Repo.objects.get(org=org, full_name="acme/widgets")
+    repo.snapshot_build_status = SnapshotBuildStatus.READY
+    repo.save(update_fields=["snapshot_build_status"])
     signal = Signal.objects.create(
         org=org,
         repo=repo,
@@ -363,15 +372,10 @@ def test_failed_run_writeback_explains_failure_reason(client: Client) -> None:
     fake_github = FakeGitHubClient()
 
     with use_executor(fake_executor), use_github_client(fake_github):
+        run_jobs()
         response = post_webhook(client, "issues", "issues_labeled.json")
         assert response.status_code == 202
-        connector = cast(WorkerConnectorFactory, app.connector)
-        with app.replace_connector(connector.get_worker_connector()):
-            app.run_worker(
-                wait=False,
-                install_signal_handlers=False,
-                listen_notify=False,
-            )
+        run_jobs()
 
     run = Signal.objects.get().runs.get()
     assert run.state == RunState.FAILED

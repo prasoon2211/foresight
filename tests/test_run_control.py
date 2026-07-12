@@ -27,7 +27,7 @@ def org_context(client: Client) -> tuple[Client, Org, Repo]:
 
 
 @pytest.mark.django_db
-def test_stop_running_run_via_api_cancels_and_tears_down(
+def test_stop_running_run_via_api_cancels_and_retains_sandbox(
     org_context: tuple[Client, Org, Repo],
 ) -> None:
     client, org, repo = org_context
@@ -60,11 +60,17 @@ def test_stop_running_run_via_api_cancels_and_tears_down(
     run.refresh_from_db()
     assert run.state == RunState.FAILED
     assert run.failure_reason == FailureReason.CANCELED
-    assert fake.calls == ["create_sandbox", "launch_agent", "stream_events", "destroy"]
+    assert fake.calls == [
+        "create_sandbox",
+        "launch_agent",
+        "stream_events",
+        "get_session_messages",
+        "archive",
+    ]
 
 
 @pytest.mark.django_db
-def test_stop_during_sandbox_creation_destroys_newly_created_sandbox(
+def test_stop_during_sandbox_creation_retains_newly_created_sandbox(
     org_context: tuple[Client, Org, Repo],
 ) -> None:
     client, org, repo = org_context
@@ -86,8 +92,8 @@ def test_stop_during_sandbox_creation_destroys_newly_created_sandbox(
     run.refresh_from_db()
     assert run.state == RunState.FAILED
     assert run.failure_reason == FailureReason.CANCELED
-    assert fake.calls == ["create_sandbox", "destroy"]
-    assert fake.list_sandboxes() == []
+    assert fake.calls == ["create_sandbox", "archive"]
+    assert len(fake.list_sandboxes()) == 1
 
 
 @pytest.mark.django_db
@@ -113,7 +119,7 @@ def test_stop_during_agent_launch_stays_canceled(
     run.refresh_from_db()
     assert run.state == RunState.FAILED
     assert run.failure_reason == FailureReason.CANCELED
-    assert fake.calls == ["create_sandbox", "launch_agent", "destroy"]
+    assert fake.calls == ["create_sandbox", "launch_agent", "archive"]
 
 
 @pytest.mark.django_db(transaction=True)
