@@ -6,6 +6,12 @@
       "runId": "run-2d5d7259-2d4e-46b5-af04-aeb30f583852",
       "launchedAt": "2026-07-12T15:20:14.609Z"
     },
+    "11": {
+      "status": "launched",
+      "agentId": "bc-3dcada8a-4d6f-4402-9d4b-1ca4ce20d9b5",
+      "runId": "run-6f0f434a-67a7-485c-8be0-3950e8b0529d",
+      "launchedAt": "2026-07-12T15:51:49.675Z"
+    },
     "07": {
       "status": "merged",
       "agentId": "bc-3e1c5584-9484-4b64-a507-df728ad337de",
@@ -27,10 +33,14 @@
       "mergedAt": "2026-07-12T15:17:13.014Z"
     },
     "09": {
-      "status": "launched",
+      "status": "merged",
       "agentId": "bc-090c05dc-6a61-41ca-b931-6eabca22d3bc",
       "runId": "run-659c0589-f350-4744-b18a-a9bc65159c39",
-      "launchedAt": "2026-07-12T15:17:35.409Z"
+      "launchedAt": "2026-07-12T15:17:35.409Z",
+      "prUrl": "https://github.com/prasoon2211/foresight/pull/5",
+      "branch": "cursor/auth-orgs-api-tokens-d3bc",
+      "finishedAt": "2026-07-12T15:43:00.862Z",
+      "mergedAt": "2026-07-12T15:51:30.758Z"
     }
   }
 }
