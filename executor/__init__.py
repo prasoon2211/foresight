@@ -2,6 +2,7 @@
 
 from executor.fake import FakeExecutor, FakeExecutorScript
 from executor.protocol import (
+    SETUP_LOG_PATH,
     AgentEvent,
     AgentLaunch,
     AgentMessage,
@@ -18,6 +19,9 @@ from executor.protocol import (
     SandboxRecord,
     SandboxSpec,
     SetupFailed,
+    SnapshotBuild,
+    SnapshotBuildFailed,
+    SnapshotSpec,
     TranscriptUnavailable,
 )
 
@@ -34,11 +38,15 @@ __all__ = [
     "FakeExecutor",
     "FakeExecutorScript",
     "Resources",
+    "SETUP_LOG_PATH",
     "SandboxDied",
     "SandboxHandle",
     "SandboxInventory",
     "SandboxRecord",
     "SandboxSpec",
+    "SnapshotBuild",
+    "SnapshotBuildFailed",
+    "SnapshotSpec",
     "SetupFailed",
     "TranscriptUnavailable",
 ]

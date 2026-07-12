@@ -19,6 +19,7 @@ from core.models import (
     SurfaceConnectionStatus,
     SurfaceType,
 )
+from core.snapshots import request_snapshot_build
 from surfaces.github_client import GitHubClient, get_github_client
 
 RunEnqueuer = Callable[[int], object]
@@ -213,7 +214,7 @@ def _connect_repositories(
     repositories: list[dict[str, Any]],
 ) -> None:
     for repository in repositories:
-        repo, _ = Repo.objects.get_or_create(
+        repo, created = Repo.objects.get_or_create(
             org=connection.org,
             full_name=repository["full_name"],
             defaults={
@@ -231,6 +232,13 @@ def _connect_repositories(
                 "connection_status",
             ]
         )
+        if created:
+            from orchestration.tasks import enqueue_snapshot_build
+
+            request_snapshot_build(
+                repo=repo,
+                enqueue_build=enqueue_snapshot_build,
+            )
 
 
 class GitHubSurfaceAdapter:

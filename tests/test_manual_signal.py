@@ -1,12 +1,15 @@
+import json
+from pathlib import Path
 from typing import Protocol, cast
 
 import pytest
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.test import Client
 from procrastinate.connector import BaseAsyncConnector
 from procrastinate.contrib.django import app
 
-from core.models import Org, OrgMembership, Repo, ResultStatus, RunState
+from core.models import Org, OrgMembership, Repo, ResultStatus, Run, RunState
 from executor import AgentEvent, AgentMessage, FakeExecutor, FakeExecutorScript
 from orchestration.executor_backend import use_executor
 from orchestration.run_orchestrator import orchestrate_run
@@ -17,7 +20,12 @@ class WorkerConnectorFactory(Protocol):
 
 
 @pytest.mark.django_db(transaction=True)
-def test_manual_signal_runs_to_awaiting_review_over_the_api(client: Client) -> None:
+def test_manual_signal_runs_to_awaiting_review_over_the_api(
+    client: Client,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "SESSION_EXPORT_ROOT", tmp_path)
     user = get_user_model().objects.create_user(
         username="member",
         email="member@example.com",
@@ -28,7 +36,13 @@ def test_manual_signal_runs_to_awaiting_review_over_the_api(client: Client) -> N
         user=user,
         role=OrgMembership.Role.MEMBER,
     )
-    repo = Repo.objects.create(org=org, full_name="acme/widgets")
+    repo = Repo.objects.create(
+        org=org,
+        full_name="acme/widgets",
+        snapshot_id="snapshot-123",
+        setup_script="uv sync",
+        env={".env": "MODE=test\n"},
+    )
     client.force_login(user)
     fake = FakeExecutor(
         FakeExecutorScript(
@@ -111,12 +125,23 @@ def test_manual_signal_runs_to_awaiting_review_over_the_api(client: Client) -> N
         "launch_agent",
         "stream_events",
         "get_session_messages",
+        "archive",
     ]
     assert fake.sandbox_specs[0].labels == {
+        "managed_by": "foresight",
         "run_id": str(created["run_id"]),
         "repo": "acme/widgets",
         "trigger": "manual",
     }
+    assert fake.sandbox_specs[0].snapshot == "snapshot-123"
+    assert fake.sandbox_specs[0].setup_script == "uv sync"
+    assert fake.sandbox_specs[0].env_files[0].target_path == ".env"
+    run_export = tmp_path / f"run-{created['run_id']}.json"
+    assert run_export.exists()
+    assert json.loads(run_export.read_text())["messages"][0]["role"] == "assistant"
+    run = Run.objects.get(pk=created["run_id"])
+    assert run.session_export_path == str(run_export)
+    assert run.sandbox_archived_at is not None
     prompt = fake.agent_launches[0].prompt
     assert "- Signal: Fix widget race" in prompt
     assert "<signal_body>\nTwo updates can overwrite one another.\n</signal_body>" in prompt

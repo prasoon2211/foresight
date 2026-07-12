@@ -28,10 +28,11 @@ from api.schemas import (
     RepoSettingsIn,
     RunOut,
     RunResultOut,
+    SetupVerificationOut,
     SignalOut,
 )
 from core.api_tokens import mint_api_token, revoke_api_token
-from core.intake import create_manual_signal, rerun_signal
+from core.intake import SnapshotNotReady, create_manual_signal, rerun_signal
 from core.models import ApiToken, Org, OrgMembership, Repo, Run, Signal
 from core.organizations import (
     AlreadyOrgMember,
@@ -42,8 +43,9 @@ from core.organizations import (
 )
 from core.outcome import RunOutcome, derive_outcome_status, derive_stranded
 from core.run_control import stop_run
+from core.snapshots import request_snapshot_build, verify_repo_setup
 from orchestration.executor_backend import get_executor
-from orchestration.tasks import enqueue_run_orchestrator
+from orchestration.tasks import enqueue_run_orchestrator, enqueue_snapshot_build
 
 router = Router(tags=["orgs", "signals", "runs"])
 
@@ -122,6 +124,11 @@ def repo_out(repo: Repo) -> RepoOut:
         full_name=repo.full_name,
         default_branch=repo.default_branch,
         has_env=bool(repo.env),
+        base_snapshot=repo.base_snapshot,
+        snapshot_build_status=repo.snapshot_build_status,
+        snapshot_build_output=repo.snapshot_build_output,
+        setup_verification_status=repo.setup_verification_status,
+        setup_verification_output=repo.setup_verification_output,
     )
 
 
@@ -255,11 +262,74 @@ def change_repo_settings(
     repo_id: int,
     payload: RepoSettingsIn,
 ) -> RepoOut:
-    get_org_access(request, org_id)
+    access = get_org_access(request, org_id)
+    require_admin(access)
     repo = get_object_or_404(Repo, pk=repo_id, org_id=org_id)
-    repo.env = payload.env
-    repo.save(update_fields=["env"])
+    update_fields: list[str] = []
+    if "env" in payload.model_fields_set and payload.env is not None:
+        repo.env = payload.env
+        update_fields.append("env")
+    if "setup_script" in payload.model_fields_set and payload.setup_script is not None:
+        repo.setup_script = payload.setup_script
+        update_fields.append("setup_script")
+    base_snapshot = payload.base_snapshot
+    base_changed = (
+        "base_snapshot" in payload.model_fields_set
+        and base_snapshot is not None
+        and base_snapshot != repo.base_snapshot
+    )
+    if base_changed:
+        assert base_snapshot is not None
+        repo.base_snapshot = base_snapshot
+        update_fields.append("base_snapshot")
+    if update_fields:
+        repo.save(update_fields=update_fields)
+    if base_changed:
+        repo = request_snapshot_build(
+            repo=repo,
+            enqueue_build=enqueue_snapshot_build,
+        )
     return repo_out(repo)
+
+
+@router.post(
+    "/orgs/{org_id}/repos/{repo_id}/snapshots",
+    auth=org_auth,
+    response={202: RepoOut, API_ERROR_STATUSES: ApiErrorOut},
+)
+def rebuild_repo_snapshot(
+    request: AuthenticatedRequest,
+    org_id: int,
+    repo_id: int,
+) -> Status[RepoOut]:
+    access = get_org_access(request, org_id)
+    require_admin(access)
+    repo = get_object_or_404(Repo, pk=repo_id, org_id=org_id)
+    repo = request_snapshot_build(
+        repo=repo,
+        enqueue_build=enqueue_snapshot_build,
+    )
+    return Status(202, repo_out(repo))
+
+
+@router.post(
+    "/orgs/{org_id}/repos/{repo_id}/verify-setup",
+    auth=org_auth,
+    response={200: SetupVerificationOut, API_ERROR_STATUSES: ApiErrorOut},
+)
+def verify_setup(
+    request: AuthenticatedRequest,
+    org_id: int,
+    repo_id: int,
+) -> SetupVerificationOut:
+    access = get_org_access(request, org_id)
+    require_admin(access)
+    repo = get_object_or_404(Repo, pk=repo_id, org_id=org_id)
+    verification = verify_repo_setup(repo=repo, executor=get_executor())
+    return SetupVerificationOut(
+        status=verification.status,
+        output=verification.output,
+    )
 
 
 @router.post(
@@ -343,12 +413,20 @@ def create_signal(
 ) -> Status[CreatedSignalOut]:
     get_org_access(request, org_id)
     repo = get_object_or_404(Repo, pk=payload.repo_id, org_id=org_id)
-    signal, run = create_manual_signal(
-        repo=repo,
-        title=payload.title,
-        body=payload.body,
-        enqueue_run=enqueue_run_orchestrator,
-    )
+    try:
+        signal, run = create_manual_signal(
+            repo=repo,
+            title=payload.title,
+            body=payload.body,
+            enqueue_run=enqueue_run_orchestrator,
+        )
+    except SnapshotNotReady as error:
+        raise ApiError(
+            status_code=409,
+            code="snapshot_not_ready",
+            message=str(error),
+            hint="Wait for the snapshot build to succeed, then retry.",
+        ) from error
     return Status(
         201,
         CreatedSignalOut(
@@ -431,5 +509,13 @@ def rerun(
 ) -> Status[RunOut]:
     get_org_access(request, org_id)
     signal = get_object_or_404(Signal, pk=signal_id, org_id=org_id)
-    run = rerun_signal(signal=signal, enqueue_run=enqueue_run_orchestrator)
+    try:
+        run = rerun_signal(signal=signal, enqueue_run=enqueue_run_orchestrator)
+    except SnapshotNotReady as error:
+        raise ApiError(
+            status_code=409,
+            code="snapshot_not_ready",
+            message=str(error),
+            hint="Wait for the snapshot build to succeed, then retry.",
+        ) from error
     return Status(201, _run_out(run))

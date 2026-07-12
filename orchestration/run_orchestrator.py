@@ -1,18 +1,21 @@
 from enum import StrEnum
 
+from django.conf import settings
 from django.db import transaction
+from django.utils import timezone
 
 from core.harness import render_harness_prompt
 from core.models import FailureReason, Org, ResultStatus, Run, RunState
 from core.result_contract import RESULT_SCHEMA, ResultSource, resolve_result
 from core.run_control import fail_run
+from core.session_exports import store_session_export
+from core.snapshots import sandbox_spec_for_repo
 from executor import (
     AgentLaunch,
     AgentSession,
     DurableExecutor,
     SandboxDied,
     SandboxHandle,
-    SandboxSpec,
     SetupFailed,
 )
 from surfaces.github import find_open_pull_request_for_run
@@ -94,21 +97,18 @@ def orchestrate_run(run_id: int, executor: DurableExecutor) -> RunJobOutcome:
                 if occupied_slots.count() >= org.concurrency_cap:
                     return RunJobOutcome.POSTPONED
                 run.state = RunState.PROVISIONING
-                run.save(update_fields=["state", "updated_at"])
+                run.executor_type = executor.executor_type
+                run.save(update_fields=["state", "executor_type", "updated_at"])
         if surface_adapter is not None:
             surface_adapter.notify_run_started(run)
         try:
             handle = executor.create_sandbox(
-                SandboxSpec(
-                    snapshot=f"repo:{run.signal.repo.full_name}",
-                    env_files=[],
-                    setup_script=None,
+                sandbox_spec_for_repo(
+                    run.signal.repo,
                     labels={
                         "run_id": str(run.pk),
-                        "repo": run.signal.repo.full_name,
                         "trigger": run.signal.source,
                     },
-                    resources=None,
                 )
             )
         except SetupFailed as error:
@@ -147,7 +147,7 @@ def orchestrate_run(run_id: int, executor: DurableExecutor) -> RunJobOutcome:
             handle,
             AgentLaunch(
                 prompt=render_harness_prompt(run),
-                model="fake/model",
+                model=settings.OPENCODE_MODEL,
                 credentials=run.signal.org.agent_credentials(),
                 server_password=run.server_password,
                 output_schema=RESULT_SCHEMA,
@@ -177,7 +177,9 @@ def orchestrate_run(run_id: int, executor: DurableExecutor) -> RunJobOutcome:
     session = AgentSession(
         session_id=run.agent_session_id,
         base_url=run.agent_base_url,
+        server_password=run.server_password,
     )
+    session_messages = None
     if not run.result_status:
         session_completed = False
         try:
@@ -217,8 +219,10 @@ def orchestrate_run(run_id: int, executor: DurableExecutor) -> RunJobOutcome:
             )
             return RunJobOutcome.FINISHED
 
+        resolved_messages = executor.get_session_messages(handle, session)
+        session_messages = resolved_messages
         resolution = resolve_result(
-            read_transcript=lambda: executor.get_session_messages(handle, session),
+            read_transcript=lambda: resolved_messages,
             read_result_file=lambda: executor.read_file(
                 handle,
                 "/tmp/foresight/result.json",
@@ -273,6 +277,19 @@ def orchestrate_run(run_id: int, executor: DurableExecutor) -> RunJobOutcome:
             reason=FailureReason.AGENT_REPORTED_BLOCKED,
         )
         return RunJobOutcome.FINISHED
+
+    if not run.session_export_path:
+        if session_messages is None:
+            session_messages = executor.get_session_messages(handle, session)
+        run.session_export_path = store_session_export(
+            run_id=run.pk,
+            messages=session_messages,
+        )
+        run.save(update_fields=["session_export_path", "updated_at"])
+    if run.sandbox_archived_at is None:
+        executor.archive(handle)
+        run.sandbox_archived_at = timezone.now()
+        run.save(update_fields=["sandbox_archived_at", "updated_at"])
 
     with transaction.atomic():
         current_run = Run.objects.select_for_update().get(pk=run.pk)

@@ -4,6 +4,7 @@ from django.db import connection
 from django.utils import timezone
 from procrastinate.contrib.django import app
 
+from core.snapshots import build_repo_snapshot
 from orchestration.executor_backend import get_executor
 from orchestration.reconciliation import reconcile_sandboxes
 from orchestration.run_orchestrator import RunJobOutcome, orchestrate_run
@@ -37,6 +38,21 @@ def enqueue_run_orchestrator(run_id: int) -> int:
         raise RuntimeError("run orchestrators must be enqueued inside transaction.atomic()")
 
     return run_orchestrator.defer(run_id=run_id)
+
+
+@app.task
+def build_snapshot(repo_id: int, build_token: str) -> None:
+    build_repo_snapshot(
+        repo_id=repo_id,
+        build_token=build_token,
+        executor=get_executor(),
+    )
+
+
+def enqueue_snapshot_build(repo_id: int, build_token: str) -> int:
+    if not connection.in_atomic_block:
+        raise RuntimeError("snapshot builds must be enqueued inside transaction.atomic()")
+    return build_snapshot.defer(repo_id=repo_id, build_token=build_token)
 
 
 @app.periodic(cron="*/5 * * * *")

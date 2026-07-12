@@ -2,6 +2,8 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Protocol
 
+SETUP_LOG_PATH = "/tmp/foresight/setup.log"
+
 
 class SetupFailed(Exception):
     def __init__(self, detail: str) -> None:
@@ -15,6 +17,12 @@ class SandboxDied(Exception):
 
 class TranscriptUnavailable(Exception):
     pass
+
+
+class SnapshotBuildFailed(Exception):
+    def __init__(self, detail: str) -> None:
+        super().__init__(detail)
+        self.detail = detail
 
 
 @dataclass(frozen=True)
@@ -37,6 +45,21 @@ class SandboxSpec:
     setup_script: str | None
     labels: dict[str, str]
     resources: Resources | None
+
+
+@dataclass(frozen=True)
+class SnapshotSpec:
+    name: str
+    base_image: str
+    repo_url: str
+    agent_version: str
+    resources: Resources
+
+
+@dataclass(frozen=True)
+class SnapshotBuild:
+    snapshot_id: str
+    output: str
 
 
 @dataclass(frozen=True)
@@ -68,6 +91,7 @@ class AgentLaunch:
 class AgentSession:
     session_id: str
     base_url: str
+    server_password: str = ""
 
 
 @dataclass(frozen=True)
@@ -140,3 +164,11 @@ class SandboxInventory(Protocol):
 
 class DurableExecutor(Executor, SandboxInventory, Protocol):
     """Executor plus provider inventory for recovery and reconciliation."""
+
+    executor_type: str
+
+    def build_snapshot(self, spec: SnapshotSpec) -> SnapshotBuild: ...
+
+    def archive(self, handle: SandboxHandle) -> None: ...
+
+    def revive(self, handle: SandboxHandle) -> None: ...

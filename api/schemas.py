@@ -44,7 +44,9 @@ class OrgSettingsOut(Schema):
 
 
 class RepoSettingsIn(Schema):
-    env: dict[str, str]
+    env: dict[str, str] | None = None
+    base_snapshot: str | None = Field(default=None, min_length=1)
+    setup_script: str | None = None
 
 
 class RepoOut(Schema):
@@ -52,6 +54,16 @@ class RepoOut(Schema):
     full_name: str
     default_branch: str
     has_env: bool
+    base_snapshot: str
+    snapshot_build_status: str
+    snapshot_build_output: str
+    setup_verification_status: str
+    setup_verification_output: str
+
+
+class SetupVerificationOut(Schema):
+    status: str
+    output: str
 
 
 class ApiTokenCreateIn(Schema):
