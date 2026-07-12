@@ -6,11 +6,15 @@ After this ticket, a run's result card is trustworthy even when the agent's repo
 
 **Blocked by:** 08 — Tracer bullet (wire-up points in the orchestrator); 11 — GitHub surface (PR salvage needs the GitHub client).
 
-**Status:** claimed
+**Status:** resolved
 
-- [ ] Rendering tests: all six variables substituted, signal body wrapped injection-resistantly, manual and GitHub-origin signals both render, branch names unique per run with a predictable prefix
-- [ ] Extraction precedence over transcript fixtures: happy block; malformed JSON falls through to the file; both missing falls through to PR salvage against the fake GitHub client; everything missing synthesizes a failure with confidence zero
-- [ ] Result payloads schema-validated; repos created before and after a default-prompt update keep their own copies (default never mutates existing repos)
-- [ ] End-to-end: a fake run whose scripted transcript ends in a result block lands with the right result columns
+- [x] Rendering tests: all six variables substituted, signal body wrapped injection-resistantly, manual and GitHub-origin signals both render, branch names unique per run with a predictable prefix
+- [x] Extraction precedence over transcript fixtures: happy block; malformed JSON falls through to the file; both missing falls through to PR salvage against the fake GitHub client; everything missing synthesizes a failure with confidence zero
+- [x] Result payloads schema-validated; repos created before and after a default-prompt update keep their own copies (default never mutates existing repos)
+- [x] End-to-end: a fake run whose scripted transcript ends in a result block lands with the right result columns
 
 Spec sections: Harness prompt and result contract. Asset: [default harness prompt](../assets/default-harness-prompt.md).
+
+## Comments
+
+2026-07-12 — Shipped versioned prompt rendering and resilient structured-result resolution in [PR #8](https://github.com/prasoon2211/foresight/pull/8).
