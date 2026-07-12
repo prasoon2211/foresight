@@ -59,7 +59,7 @@ class DaytonaExecutor:
                 (
                     "apt-get update && DEBIAN_FRONTEND=noninteractive "
                     "apt-get install -y --no-install-recommends "
-                    "ca-certificates curl git docker.io docker-compose && "
+                    "ca-certificates curl git docker.io docker-compose fuse-overlayfs && "
                     "rm -rf /var/lib/apt/lists/*"
                 ),
                 f"npm install --global opencode-ai@{shlex.quote(spec.agent_version)}",
@@ -102,6 +102,7 @@ class DaytonaExecutor:
         handle = SandboxHandle(sandbox_id=sandbox.id)
         try:
             sandbox.process.exec("mkdir -p /tmp/foresight")
+            self._ensure_docker(sandbox)
             for env_file in spec.env_files:
                 parent = env_file.target_path.rsplit("/", 1)[0]
                 if parent:
@@ -128,6 +129,26 @@ class DaytonaExecutor:
             sandbox.delete()
             raise SetupFailed(str(error)) from error
         return handle
+
+    @staticmethod
+    def _ensure_docker(sandbox: Any) -> None:
+        if sandbox.process.exec("docker info >/dev/null 2>&1", timeout=15).exit_code == 0:
+            return
+        sandbox.process.exec(
+            (
+                "nohup dockerd --host=unix:///var/run/docker.sock "
+                "--storage-driver=fuse-overlayfs "
+                ">/tmp/foresight/dockerd.log 2>&1 </dev/null &"
+            ),
+            timeout=30,
+        )
+        for _ in range(30):
+            if sandbox.process.exec("docker info >/dev/null 2>&1", timeout=15).exit_code == 0:
+                return
+            time.sleep(1)
+        log = sandbox.fs.download_file("/tmp/foresight/dockerd.log")
+        detail = log.decode() if log else "Docker daemon did not become ready"
+        raise SetupFailed(detail)
 
     def launch_agent(
         self,
@@ -236,8 +257,9 @@ class DaytonaExecutor:
     ) -> Iterator[AgentEvent]:
         headers = self._preview_headers(handle)
         failures = 0
+        first_connection = True
         while failures < 5:
-            if self._session_completed(handle, session):
+            if not first_connection and self._session_completed(handle, session):
                 yield AgentEvent(kind="session.idle", session_id=session.session_id)
                 return
             try:
@@ -249,6 +271,7 @@ class DaytonaExecutor:
                     timeout=httpx.Timeout(connect=30, read=None, write=30, pool=30),
                 ) as response:
                     response.raise_for_status()
+                    first_connection = False
                     failures = 0
                     data_lines: list[str] = []
                     for line in response.iter_lines():
@@ -262,6 +285,14 @@ class DaytonaExecutor:
                         if event is None:
                             continue
                         yield event
+                        if event.kind == "server.connected" and self._session_completed(
+                            handle, session
+                        ):
+                            yield AgentEvent(
+                                kind="session.idle",
+                                session_id=session.session_id,
+                            )
+                            return
                         if event.session_id == session.session_id and event.kind in {
                             "session.idle",
                             "session.error",

@@ -6,6 +6,7 @@ from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 import pytest
+from daytona import Daytona, PtySize
 
 from core.session_exports import store_session_export
 from executor import (
@@ -87,6 +88,7 @@ def test_real_daytona_smoke_contract(tmp_path: Path, monkeypatch: pytest.MonkeyP
         events = list(executor.stream_events(handle, session))
         messages = executor.get_session_messages(handle, session)
         assert any(event.kind == "session.idle" for event in events)
+        assert any(event.kind != "session.idle" for event in events)
         assert any(message.role == "assistant" and message.text for message in messages)
 
         monkeypatch.setattr(
@@ -109,13 +111,38 @@ def test_real_daytona_smoke_contract(tmp_path: Path, monkeypatch: pytest.MonkeyP
             )
         assert health.status_code == 200
         assert endpoints.terminal_ws.startswith("wss://")
-        assert (
-            executor.read_file(
-                handle,
-                "/root/.local/share/opencode/auth.json",
-            )
-            is None
+        sandbox = Daytona().get(handle.sandbox_id)
+        assert (sandbox.cpu, sandbox.memory, sandbox.disk) == (4, 8, 10)
+        auth_probe = sandbox.process.exec('test ! -e "$HOME/.local/share/opencode/auth.json"')
+        assert auth_probe.exit_code == 0
+
+        tui_probe = sandbox.process.exec(
+            (
+                "timeout 8 script -q -c "
+                '\'opencode attach "$ATTACH_URL" --session "$SESSION_ID" '
+                '-p "$SERVER_PASSWORD"\' /tmp/foresight/tui-attach.log'
+            ),
+            cwd="/workspace/repo",
+            env={
+                "ATTACH_URL": endpoints.api_url,
+                "SESSION_ID": session.session_id,
+                "SERVER_PASSWORD": session.server_password,
+            },
+            timeout=15,
         )
+        assert tui_probe.exit_code == 124
+
+        pty_id = f"foresight-{session.session_id}"
+        pty = sandbox.process.connect_pty_session(pty_id)
+        resized = pty.resize(PtySize(rows=40, cols=120))
+        assert (resized.rows, resized.cols) == (40, 120)
+        pty.disconnect()
+        pty = sandbox.process.connect_pty_session(pty_id)
+        output: list[bytes] = []
+        pty.send_input("printf pty-reconnected; exit\n")
+        result = pty.wait(on_data=output.append, timeout=15)
+        assert result.exit_code == 0
+        assert b"pty-reconnected" in b"".join(output)
 
         executor.archive(handle)
         executor.revive(handle)
