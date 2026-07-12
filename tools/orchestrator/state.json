@@ -11,10 +11,14 @@
       "mergedAt": "2026-07-12T14:44:46.669Z"
     },
     "08": {
-      "status": "launched",
+      "status": "merged",
       "agentId": "bc-16cdf3a0-baa4-4a7c-ac8f-a48b1bdd18b0",
       "runId": "run-184aae7d-342a-4c30-83f8-6aeb85662a53",
-      "launchedAt": "2026-07-12T14:45:38.873Z"
+      "launchedAt": "2026-07-12T14:45:38.873Z",
+      "prUrl": "https://github.com/prasoon2211/foresight/pull/4",
+      "branch": "cursor/manual-signal-run-18b0",
+      "finishedAt": "2026-07-12T15:07:04.267Z",
+      "mergedAt": "2026-07-12T15:17:13.014Z"
     }
   }
 }

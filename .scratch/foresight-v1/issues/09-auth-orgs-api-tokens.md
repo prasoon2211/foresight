@@ -6,7 +6,7 @@ This slice also establishes the agent-legible error convention (structured code 
 
 **Blocked by:** 08 — Tracer bullet.
 
-**Status:** ready-for-agent
+**Status:** claimed
 
 - [ ] Signup → email verification → login → org creation → member invite with role, all driven through the real endpoints in tests
 - [ ] Org agent credential and env-style secrets are write-only: accepted on write, never echoed on read
