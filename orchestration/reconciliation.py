@@ -14,6 +14,7 @@ def reconcile_sandboxes(executor: DurableExecutor) -> None:
         for run in Run.objects.filter(pk__in=run_ids).only(
             "pk",
             "state",
+            "sandbox_id",
             "sandbox_archived_at",
         )
     }
@@ -25,8 +26,15 @@ def reconcile_sandboxes(executor: DurableExecutor) -> None:
             executor.destroy(sandbox.handle)
         elif run.state in {RunState.DONE, RunState.FAILED} and run.sandbox_archived_at is None:
             executor.archive(sandbox.handle)
+            run.sandbox_id = sandbox.handle.sandbox_id
             run.sandbox_archived_at = timezone.now()
-            run.save(update_fields=["sandbox_archived_at", "updated_at"])
+            run.save(
+                update_fields=[
+                    "sandbox_id",
+                    "sandbox_archived_at",
+                    "updated_at",
+                ]
+            )
 
     missing_runs = (
         Run.objects.filter(

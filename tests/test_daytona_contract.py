@@ -51,6 +51,8 @@ def test_real_daytona_smoke_contract(tmp_path: Path, monkeypatch: pytest.MonkeyP
         handle = executor.create_sandbox(
             SandboxSpec(
                 snapshot=snapshot_id,
+                git_ref="master",
+                git_token=None,
                 env_files=[
                     EnvFile(
                         "/workspace/repo/.foresight-contract",
@@ -58,7 +60,6 @@ def test_real_daytona_smoke_contract(tmp_path: Path, monkeypatch: pytest.MonkeyP
                     )
                 ],
                 setup_script=(
-                    "git fetch --all && "
                     'test "$(cat .foresight-contract)" = materialized-by-foresight && '
                     "printf setup-complete"
                 ),

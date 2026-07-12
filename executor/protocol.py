@@ -41,6 +41,8 @@ class Resources:
 @dataclass(frozen=True)
 class SandboxSpec:
     snapshot: str
+    git_ref: str
+    git_token: str | None
     env_files: list[EnvFile]
     setup_script: str | None
     labels: dict[str, str]
@@ -54,6 +56,7 @@ class SnapshotSpec:
     repo_url: str
     agent_version: str
     resources: Resources
+    clone_token: str | None = None
 
 
 @dataclass(frozen=True)

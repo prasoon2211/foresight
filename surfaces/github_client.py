@@ -12,6 +12,8 @@ from django.conf import settings
 
 
 class GitHubClient(Protocol):
+    def installation_token(self, installation_id: int) -> str: ...
+
     def post_issue_comment(
         self,
         installation_id: int,
@@ -58,6 +60,10 @@ class FakeGitHubClient:
         self.label_removals: list[tuple[str, int, str]] = []
         self.pull_request_lookups: list[tuple[int, str, str]] = []
         self.open_pull_requests = dict(open_pull_requests or {})
+
+    def installation_token(self, installation_id: int) -> str:
+        self.calls.append("installation_token")
+        return f"fake-installation-token-{installation_id}"
 
     def post_issue_comment(
         self,
@@ -185,7 +191,7 @@ class GitHubAppClient:
         pr_url = response[0].get("html_url")
         return str(pr_url) if pr_url else None
 
-    def _installation_token(self, installation_id: int) -> str:
+    def installation_token(self, installation_id: int) -> str:
         cached = self._tokens.get(installation_id)
         if cached is not None and cached[1] > time.time() + 60:
             return cached[0]
@@ -216,7 +222,7 @@ class GitHubAppClient:
         if authorization is None:
             if installation_id is None:
                 raise ValueError("an installation ID or authorization header is required")
-            authorization = f"Bearer {self._installation_token(installation_id)}"
+            authorization = f"Bearer {self.installation_token(installation_id)}"
         request = Request(
             f"{self.api_url}{path}",
             data=json.dumps(payload).encode() if payload is not None else None,

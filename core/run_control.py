@@ -2,7 +2,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from core.models import FailureReason, Run, RunState
-from core.session_exports import store_session_export
+from core.session_exports import store_run_artifact, store_session_export
 from executor import AgentSession, DurableExecutor, SandboxHandle
 
 
@@ -28,6 +28,20 @@ def fail_run(
     if not run.sandbox_id:
         return run
     handle = SandboxHandle(sandbox_id=run.sandbox_id)
+    if reason != FailureReason.SANDBOX_DIED and not run.setup_log_path:
+        run.setup_log_path = store_run_artifact(
+            run_id=run.pk,
+            name="setup.log",
+            content=executor.read_file(handle, "/tmp/foresight/setup.log") or "",
+        )
+        run.save(update_fields=["setup_log_path", "updated_at"])
+    if reason != FailureReason.SANDBOX_DIED and run.agent_session_id and not run.agent_log_path:
+        run.agent_log_path = store_run_artifact(
+            run_id=run.pk,
+            name="agent.log",
+            content=executor.read_file(handle, "/tmp/foresight/agent.log") or "",
+        )
+        run.save(update_fields=["agent_log_path", "updated_at"])
     if (
         reason != FailureReason.SANDBOX_DIED
         and run.agent_session_id
@@ -40,13 +54,23 @@ def fail_run(
         )
         try:
             messages = executor.get_session_messages(handle, session)
-            run.session_export_path = store_session_export(
-                run_id=run.pk,
-                messages=messages,
+        except Exception as error:
+            messages = []
+            unavailable = f"Session transcript unavailable: {type(error).__name__}"
+            run.failure_detail = "\n".join(
+                part for part in [run.failure_detail, unavailable] if part
             )
-            run.save(update_fields=["session_export_path", "updated_at"])
-        except Exception:
-            pass
+        run.session_export_path = store_session_export(
+            run_id=run.pk,
+            messages=messages,
+        )
+        run.save(
+            update_fields=[
+                "session_export_path",
+                "failure_detail",
+                "updated_at",
+            ]
+        )
     if reason == FailureReason.SANDBOX_DIED:
         executor.destroy(handle)
     elif run.sandbox_archived_at is None:

@@ -122,9 +122,11 @@ def test_manual_signal_runs_to_awaiting_review_over_the_api(
     ]
     assert [call for call in fake.calls if call != "list_sandboxes"] == [
         "create_sandbox",
+        "read_file",
         "launch_agent",
         "stream_events",
         "get_session_messages",
+        "read_file",
         "archive",
     ]
     assert fake.sandbox_specs[0].labels == {
@@ -141,6 +143,8 @@ def test_manual_signal_runs_to_awaiting_review_over_the_api(
     assert json.loads(run_export.read_text())["messages"][0]["role"] == "assistant"
     run = Run.objects.get(pk=created["run_id"])
     assert run.session_export_path == str(run_export)
+    assert Path(run.setup_log_path).read_text() == ""
+    assert Path(run.agent_log_path).read_text() == "Fake agent log."
     assert run.sandbox_archived_at is not None
     prompt = fake.agent_launches[0].prompt
     assert "- Signal: Fix widget race" in prompt

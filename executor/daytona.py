@@ -1,5 +1,6 @@
 import json
 import shlex
+import sys
 import time
 from collections.abc import Iterator
 from typing import Any
@@ -49,37 +50,45 @@ class DaytonaExecutor:
     def __init__(self, client: Daytona | None = None) -> None:
         self._daytona = client or Daytona()
         self._http = httpx.Client(timeout=httpx.Timeout(connect=30, read=30, write=30, pool=30))
+        self._event_streams: dict[str, tuple[Any, httpx.Response]] = {}
 
     def build_snapshot(self, spec: SnapshotSpec) -> SnapshotBuild:
         logs: list[str] = []
-        image = (
-            Image.base(spec.base_image)
-            .run_commands(
-                (
-                    "apt-get update && DEBIAN_FRONTEND=noninteractive "
-                    "apt-get install -y --no-install-recommends "
-                    "ca-certificates curl git docker.io docker-compose fuse-overlayfs && "
-                    "rm -rf /var/lib/apt/lists/*"
-                ),
-                f"npm install --global opencode-ai@{shlex.quote(spec.agent_version)}",
-                f"git clone --depth=1 {shlex.quote(spec.repo_url)} {WORKSPACE}",
-            )
-            .workdir(WORKSPACE)
+        commands = [
+            (
+                "apt-get update && DEBIAN_FRONTEND=noninteractive "
+                "apt-get install -y --no-install-recommends "
+                "ca-certificates curl git docker.io docker-compose fuse-overlayfs && "
+                "rm -rf /var/lib/apt/lists/*"
+            ),
+            f"npm install --global opencode-ai@{shlex.quote(spec.agent_version)}",
+        ]
+        if spec.clone_token is None:
+            commands.append(f"git clone --depth=1 {shlex.quote(spec.repo_url)} {WORKSPACE}")
+        image = Image.base(spec.base_image).run_commands(*commands)
+        if spec.clone_token is None:
+            image = image.workdir(WORKSPACE)
+        base_name = f"{spec.name}-toolchain" if spec.clone_token else spec.name
+        resources = DaytonaResources(
+            cpu=spec.resources.cpu,
+            memory=spec.resources.memory_gib,
+            disk=spec.resources.disk_gib,
         )
         try:
             snapshot = self._daytona.snapshot.create(
                 CreateSnapshotParams(
-                    name=spec.name,
+                    name=base_name,
                     image=image,
-                    resources=DaytonaResources(
-                        cpu=spec.resources.cpu,
-                        memory=spec.resources.memory_gib,
-                        disk=spec.resources.disk_gib,
-                    ),
+                    resources=resources,
                 ),
                 on_logs=logs.append,
                 timeout=0,
             )
+            if spec.clone_token is not None:
+                snapshot = self._clone_private_repo_snapshot(
+                    spec=spec,
+                    toolchain_snapshot=snapshot,
+                )
         except DaytonaError as error:
             detail = "".join(logs) or str(error)
             raise SnapshotBuildFailed(detail) from error
@@ -87,6 +96,38 @@ class DaytonaExecutor:
             snapshot_id=snapshot.name,
             output="".join(logs) or f"Snapshot {snapshot.name} built.",
         )
+
+    def _clone_private_repo_snapshot(
+        self,
+        *,
+        spec: SnapshotSpec,
+        toolchain_snapshot: Any,
+    ) -> Any:
+        sandbox = self._daytona.create(
+            CreateSandboxFromSnapshotParams(
+                snapshot=toolchain_snapshot.name,
+                auto_stop_interval=0,
+            ),
+            timeout=120,
+        )
+        try:
+            response = sandbox.process.exec(
+                (
+                    "git -c http.extraHeader="
+                    "'Authorization: Bearer '\"$FORESIGHT_CLONE_TOKEN\" "
+                    f"clone --depth=1 {shlex.quote(spec.repo_url)} {WORKSPACE}"
+                ),
+                env={"FORESIGHT_CLONE_TOKEN": spec.clone_token or ""},
+                timeout=300,
+            )
+            if response.exit_code != 0:
+                raise SnapshotBuildFailed(response.result or "private clone failed")
+            sandbox.stop(timeout=120)
+            sandbox._experimental_create_snapshot(spec.name, timeout=600)
+            return self._daytona.snapshot.get(spec.name)
+        finally:
+            sandbox.delete(timeout=120)
+            self._daytona.snapshot.delete(toolchain_snapshot)
 
     def create_sandbox(self, spec: SandboxSpec) -> SandboxHandle:
         sandbox = self._daytona.create(
@@ -110,24 +151,53 @@ class DaytonaExecutor:
                     env_file.content.encode(),
                     env_file.target_path,
                 )
-            output = ""
+            git_environment = (
+                {"FORESIGHT_GIT_TOKEN": spec.git_token} if spec.git_token is not None else None
+            )
+            authorization = (
+                "-c http.extraHeader='Authorization: Bearer '\"$FORESIGHT_GIT_TOKEN\" "
+                if spec.git_token is not None
+                else ""
+            )
+            git_ref = shlex.quote(spec.git_ref)
+            sync = sandbox.process.exec(
+                (
+                    f"git {authorization}fetch --prune origin {git_ref} && "
+                    f"git checkout -B {git_ref} FETCH_HEAD"
+                ),
+                cwd=WORKSPACE,
+                env=git_environment,
+                timeout=300,
+            )
+            if sync.exit_code != 0:
+                raise SetupFailed(sync.result or "failed to fetch latest repo code")
+            output = sync.result
             if spec.setup_script:
                 response = sandbox.process.exec(
                     spec.setup_script,
                     cwd=WORKSPACE,
                     timeout=1800,
                 )
-                output = response.result
+                output = f"{output}{response.result}"
                 if response.exit_code != 0:
                     raise SetupFailed(output or f"setup exited {response.exit_code}")
             sandbox.fs.upload_file(output.encode(), SETUP_LOG_PATH)
         except SetupFailed:
-            sandbox.delete()
+            self._retire_failed_sandbox(sandbox, spec)
             raise
         except DaytonaError as error:
-            sandbox.delete()
+            self._retire_failed_sandbox(sandbox, spec)
             raise SetupFailed(str(error)) from error
         return handle
+
+    @staticmethod
+    def _retire_failed_sandbox(sandbox: Any, spec: SandboxSpec) -> None:
+        if "run_id" not in spec.labels:
+            sandbox.delete()
+            return
+        sandbox.set_auto_delete_interval(ARCHIVE_RETENTION_MINUTES)
+        sandbox.stop(timeout=120)
+        sandbox.archive()
 
     @staticmethod
     def _ensure_docker(sandbox: Any) -> None:
@@ -190,6 +260,14 @@ class DaytonaExecutor:
             response.raise_for_status()
             session_id = str(response.json()["id"])
         if created:
+            event_stream = self._http.stream(
+                "GET",
+                f"{preview.url.rstrip('/')}/global/event",
+                headers=headers,
+                auth=auth,
+                timeout=httpx.Timeout(connect=30, read=None, write=30, pool=30),
+            )
+            event_response = event_stream.__enter__()
             provider_id, model_id = launch.model.split("/", 1)
             prompt: dict[str, Any] = {
                 "model": {
@@ -203,13 +281,20 @@ class DaytonaExecutor:
                     "type": "json_schema",
                     "schema": launch.output_schema,
                 }
-            response = self._http.post(
-                f"{preview.url.rstrip('/')}/session/{quote(session_id, safe='')}/prompt_async",
-                headers=headers,
-                auth=auth,
-                json=prompt,
-            )
-            response.raise_for_status()
+            try:
+                event_response.raise_for_status()
+                self._event_streams[session_id] = (event_stream, event_response)
+                response = self._http.post(
+                    f"{preview.url.rstrip('/')}/session/{quote(session_id, safe='')}/prompt_async",
+                    headers=headers,
+                    auth=auth,
+                    json=prompt,
+                )
+                response.raise_for_status()
+            except BaseException:
+                self._event_streams.pop(session_id, None)
+                event_stream.__exit__(*sys.exc_info())
+                raise
         return AgentSession(
             session_id=session_id,
             base_url=preview.url,
@@ -262,13 +347,19 @@ class DaytonaExecutor:
                 yield AgentEvent(kind="session.idle", session_id=session.session_id)
                 return
             try:
-                with self._http.stream(
-                    "GET",
-                    f"{session.base_url.rstrip('/')}/global/event",
-                    headers=headers,
-                    auth=("opencode", session.server_password),
-                    timeout=httpx.Timeout(connect=30, read=None, write=30, pool=30),
-                ) as response:
+                pending = self._event_streams.pop(session.session_id, None)
+                if pending is None:
+                    event_stream = self._http.stream(
+                        "GET",
+                        f"{session.base_url.rstrip('/')}/global/event",
+                        headers=headers,
+                        auth=("opencode", session.server_password),
+                        timeout=httpx.Timeout(connect=30, read=None, write=30, pool=30),
+                    )
+                    response = event_stream.__enter__()
+                else:
+                    event_stream, response = pending
+                try:
                     response.raise_for_status()
                     first_connection = False
                     failures = 0
@@ -297,6 +388,8 @@ class DaytonaExecutor:
                             "session.error",
                         }:
                             return
+                finally:
+                    event_stream.__exit__(None, None, None)
             except (httpx.HTTPError, json.JSONDecodeError):
                 failures += 1
             else:

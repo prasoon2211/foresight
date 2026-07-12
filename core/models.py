@@ -286,6 +286,8 @@ class Run(models.Model):
     pr_merged_at = models.DateTimeField(null=True, blank=True)
     failure_reason = models.CharField(max_length=40, choices=FailureReason, blank=True)
     failure_detail = models.TextField(blank=True)
+    setup_log_path = models.CharField(max_length=1000, blank=True)
+    agent_log_path = models.CharField(max_length=1000, blank=True)
     session_export_path = models.CharField(max_length=1000, blank=True)
     sandbox_archived_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)

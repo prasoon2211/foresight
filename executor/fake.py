@@ -34,6 +34,7 @@ class FakeExecutorScript:
     session_messages: list[AgentMessage] | None = None
     result_file: str | None = None
     setup_output: str = ""
+    agent_output: str = "Fake agent log."
     setup_failure: str | None = None
     snapshot_failure: str | None = None
     sandbox_dies: bool = False
@@ -70,6 +71,7 @@ class FakeExecutor:
             self._session_messages = []
         self._result_file = script.result_file
         self._setup_output = script.setup_output
+        self._agent_output = script.agent_output
         self._setup_failure = script.setup_failure
         self._snapshot_failure = script.snapshot_failure
         self._sandbox_dies = script.sandbox_dies
@@ -199,6 +201,8 @@ class FakeExecutor:
         self.calls.append("read_file")
         if path == "/tmp/foresight/setup.log":
             return self._setup_output
+        if path == "/tmp/foresight/agent.log":
+            return self._agent_output
         if path != "/tmp/foresight/result.json":
             return None
         return self._result_file

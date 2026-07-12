@@ -8,7 +8,7 @@ from core.harness import render_harness_prompt
 from core.models import FailureReason, Org, ResultStatus, Run, RunState
 from core.result_contract import RESULT_SCHEMA, ResultSource, resolve_result
 from core.run_control import fail_run
-from core.session_exports import store_session_export
+from core.session_exports import store_run_artifact, store_session_export
 from core.snapshots import sandbox_spec_for_repo
 from executor import (
     AgentLaunch,
@@ -162,6 +162,13 @@ def orchestrate_run(run_id: int, executor: DurableExecutor) -> RunJobOutcome:
             surface_adapter.notify_run_finished(run)
         return RunJobOutcome.FINISHED
     handle = SandboxHandle(sandbox_id=run.sandbox_id)
+    if not run.setup_log_path:
+        run.setup_log_path = store_run_artifact(
+            run_id=run.pk,
+            name="setup.log",
+            content=executor.read_file(handle, "/tmp/foresight/setup.log") or "",
+        )
+        run.save(update_fields=["setup_log_path", "updated_at"])
     if not run.agent_session_id:
         session = executor.launch_agent(
             handle,
@@ -306,6 +313,13 @@ def orchestrate_run(run_id: int, executor: DurableExecutor) -> RunJobOutcome:
         )
         return RunJobOutcome.FINISHED
 
+    if not run.agent_log_path:
+        run.agent_log_path = store_run_artifact(
+            run_id=run.pk,
+            name="agent.log",
+            content=executor.read_file(handle, "/tmp/foresight/agent.log") or "",
+        )
+        run.save(update_fields=["agent_log_path", "updated_at"])
     if run.sandbox_archived_at is None:
         executor.archive(handle)
         run.sandbox_archived_at = timezone.now()

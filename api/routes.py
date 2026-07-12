@@ -262,8 +262,7 @@ def change_repo_settings(
     repo_id: int,
     payload: RepoSettingsIn,
 ) -> RepoOut:
-    access = get_org_access(request, org_id)
-    require_admin(access)
+    get_org_access(request, org_id)
     repo = get_object_or_404(Repo, pk=repo_id, org_id=org_id)
     update_fields: list[str] = []
     if "env" in payload.model_fields_set and payload.env is not None:
@@ -302,8 +301,7 @@ def rebuild_repo_snapshot(
     org_id: int,
     repo_id: int,
 ) -> Status[RepoOut]:
-    access = get_org_access(request, org_id)
-    require_admin(access)
+    get_org_access(request, org_id)
     repo = get_object_or_404(Repo, pk=repo_id, org_id=org_id)
     repo = request_snapshot_build(
         repo=repo,
@@ -322,8 +320,7 @@ def verify_setup(
     org_id: int,
     repo_id: int,
 ) -> SetupVerificationOut:
-    access = get_org_access(request, org_id)
-    require_admin(access)
+    get_org_access(request, org_id)
     repo = get_object_or_404(Repo, pk=repo_id, org_id=org_id)
     verification = verify_repo_setup(repo=repo, executor=get_executor())
     return SetupVerificationOut(

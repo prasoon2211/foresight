@@ -23,6 +23,8 @@ def test_fake_executor_satisfies_the_runtime_contract() -> None:
     handle = executor.create_sandbox(
         SandboxSpec(
             snapshot=snapshot.snapshot_id,
+            git_ref="master",
+            git_token=None,
             env_files=[EnvFile("/workspace/repo/.env", "MODE=contract\n")],
             setup_script="printf 'setup complete'",
             labels={"managed_by": "foresight", "run_id": "13"},

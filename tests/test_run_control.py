@@ -62,8 +62,10 @@ def test_stop_running_run_via_api_cancels_and_retains_sandbox(
     assert run.failure_reason == FailureReason.CANCELED
     assert fake.calls == [
         "create_sandbox",
+        "read_file",
         "launch_agent",
         "stream_events",
+        "read_file",
         "get_session_messages",
         "archive",
     ]
@@ -119,7 +121,7 @@ def test_stop_during_agent_launch_stays_canceled(
     run.refresh_from_db()
     assert run.state == RunState.FAILED
     assert run.failure_reason == FailureReason.CANCELED
-    assert fake.calls == ["create_sandbox", "launch_agent", "archive"]
+    assert fake.calls == ["create_sandbox", "read_file", "launch_agent", "archive"]
 
 
 @pytest.mark.django_db(transaction=True)

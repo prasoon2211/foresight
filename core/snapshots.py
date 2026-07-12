@@ -20,6 +20,7 @@ from executor import (
     SnapshotSpec,
 )
 from executor.protocol import SETUP_LOG_PATH
+from surfaces.github_client import get_github_client
 
 SnapshotBuildEnqueuer = Callable[[int, str], object]
 
@@ -35,6 +36,8 @@ class SetupVerification:
 def sandbox_spec_for_repo(repo: Repo, *, labels: dict[str, str]) -> SandboxSpec:
     return SandboxSpec(
         snapshot=repo.snapshot_id or repo.base_snapshot,
+        git_ref=repo.default_branch,
+        git_token=_clone_token(repo),
         env_files=[
             EnvFile(target_path=target_path, content=content)
             for target_path, content in repo.env.items()
@@ -82,6 +85,7 @@ def build_repo_snapshot(
         repo_url=f"https://github.com/{repo.full_name}.git",
         agent_version=settings.OPENCODE_VERSION,
         resources=DEFAULT_RESOURCES,
+        clone_token=_clone_token(repo),
     )
     try:
         build = executor.build_snapshot(spec)
@@ -108,6 +112,16 @@ def build_repo_snapshot(
         snapshot_id=build.snapshot_id,
         output=build.output,
     )
+
+
+def _clone_token(repo: Repo) -> str | None:
+    connection = repo.surface_connection
+    if connection is None:
+        return None
+    installation_id = connection.identity.get("installation_id")
+    if installation_id is None:
+        return None
+    return get_github_client().installation_token(int(installation_id))
 
 
 def _finish_snapshot_build(
