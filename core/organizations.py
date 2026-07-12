@@ -1,11 +1,15 @@
 from allauth.account.models import EmailAddress
 from django.contrib.auth.models import User
-from django.db import transaction
+from django.db import IntegrityError, transaction
 
 from core.models import Org, OrgMembership
 
 
 class InviteeNotFound(Exception):
+    pass
+
+
+class AlreadyOrgMember(Exception):
     pass
 
 
@@ -33,7 +37,11 @@ def invite_org_member(
     )
     if address is None:
         raise InviteeNotFound
-    return OrgMembership.objects.create(org=org, user=address.user, role=role)
+    try:
+        with transaction.atomic():
+            return OrgMembership.objects.create(org=org, user=address.user, role=role)
+    except IntegrityError as exc:
+        raise AlreadyOrgMember from exc
 
 
 def update_org_settings(

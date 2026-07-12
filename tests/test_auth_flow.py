@@ -132,6 +132,17 @@ def test_org_admin_invites_existing_user_with_role(client: Client, role: str) ->
         "email": "teammate@example.com",
         "role": role,
     }
+    duplicate = client.post(
+        f"/api/orgs/{org_id}/members",
+        data={"email": teammate.email, "role": role},
+        content_type="application/json",
+    )
+    assert duplicate.status_code == 409
+    assert duplicate.json() == {
+        "code": "already_a_member",
+        "message": "That user is already an org member.",
+        "hint": "Use the existing membership instead of inviting the user again.",
+    }
 
 
 @pytest.mark.django_db(transaction=True)

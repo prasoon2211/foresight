@@ -34,6 +34,7 @@ from core.api_tokens import mint_api_token, revoke_api_token
 from core.intake import create_manual_signal
 from core.models import ApiToken, Org, OrgMembership, Repo, Run, Signal
 from core.organizations import (
+    AlreadyOrgMember,
     InviteeNotFound,
     create_org,
     invite_org_member,
@@ -152,6 +153,13 @@ def invite_member(
             code="user_not_found",
             message="No verified user has that email address.",
             hint="Ask the teammate to sign up and verify their email, then try again.",
+        ) from exc
+    except AlreadyOrgMember as exc:
+        raise ApiError(
+            status_code=409,
+            code="already_a_member",
+            message="That user is already an org member.",
+            hint="Use the existing membership instead of inviting the user again.",
         ) from exc
     return Status(
         201,
