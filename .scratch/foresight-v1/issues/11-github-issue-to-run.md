@@ -6,7 +6,7 @@ The boundary discipline from the spec holds: the webhook endpoint verifies signa
 
 **Blocked by:** 08 — Tracer bullet; 09 — Auth and orgs (connections belong to orgs).
 
-**Status:** ready-for-agent
+**Status:** claimed
 
 - [ ] Recorded webhook payloads POSTed at the real endpoint drive the whole flow: installation created → connection active; repos selected → Repo rows enabled with default config; issue labeled → signal + run; PR merged → run and signal done. Bad signatures rejected.
 - [ ] The canonical end-to-end: labeled-issue webhook in, fake executor scripted to succeed, fake GitHub client saw the start comment, finish comment, and label swap, surface state updated, re-notify idempotent
