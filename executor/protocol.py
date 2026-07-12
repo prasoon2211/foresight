@@ -1,6 +1,6 @@
 from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Any, Protocol
 
 
 class SetupFailed(Exception):
@@ -77,7 +77,7 @@ class AttachEndpoints:
 @dataclass(frozen=True)
 class AgentResult:
     status: str
-    pr_url: str
+    pr_url: str | None
     summary: str
     confidence: float
 
@@ -86,7 +86,6 @@ class AgentResult:
 class AgentEvent:
     kind: str
     session_id: str | None = None
-    result: AgentResult | None = None
 
 
 class Executor(Protocol):
@@ -114,6 +113,14 @@ class Executor(Protocol):
         session: AgentSession,
     ) -> Iterator[AgentEvent]: ...
 
+    def get_session_messages(
+        self,
+        handle: SandboxHandle,
+        session: AgentSession,
+    ) -> list[dict[str, Any]]: ...
+
+    def read_file(self, handle: SandboxHandle, path: str) -> str | None: ...
+
     def destroy(self, handle: SandboxHandle) -> None: ...
 
 
@@ -122,4 +129,4 @@ class SandboxInventory(Protocol):
 
 
 class DurableExecutor(Executor, SandboxInventory, Protocol):
-    """Five-verb executor plus provider inventory for recovery and reconciliation."""
+    """Executor plus provider inventory for recovery and reconciliation."""

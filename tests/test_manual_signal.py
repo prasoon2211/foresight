@@ -7,7 +7,7 @@ from procrastinate.connector import BaseAsyncConnector
 from procrastinate.contrib.django import app
 
 from core.models import Org, OrgMembership, Repo, ResultStatus, RunState
-from executor import AgentResult, FakeExecutor
+from executor import AgentEvent, FakeExecutor, FakeExecutorScript
 from orchestration.executor_backend import use_executor
 from orchestration.run_orchestrator import orchestrate_run
 
@@ -30,12 +30,26 @@ def test_manual_signal_runs_to_awaiting_review_over_the_api(client: Client) -> N
     )
     repo = Repo.objects.create(org=org, full_name="acme/widgets")
     client.force_login(user)
-    fake = FakeExecutor.succeeding(
-        AgentResult(
-            status=ResultStatus.PR_OPENED,
-            pr_url="https://github.com/acme/widgets/pull/17",
-            summary="Fixed the widget race.",
-            confidence=0.92,
+    fake = FakeExecutor(
+        FakeExecutorScript(
+            event_batches=[[AgentEvent(kind="session.idle")]],
+            session_messages=[
+                {
+                    "info": {"role": "assistant"},
+                    "parts": [
+                        {
+                            "type": "text",
+                            "text": (
+                                "Finished.\n```foresight-result\n"
+                                '{"status":"pr_opened",'
+                                '"pr_url":"https://github.com/acme/widgets/pull/17",'
+                                '"summary":"Fixed the widget race.",'
+                                '"confidence":0.92}\n```'
+                            ),
+                        }
+                    ],
+                }
+            ],
         )
     )
 
@@ -101,13 +115,16 @@ def test_manual_signal_runs_to_awaiting_review_over_the_api(client: Client) -> N
         "create_sandbox",
         "launch_agent",
         "stream_events",
+        "get_session_messages",
+        "read_file",
     ]
     assert fake.sandbox_specs[0].labels == {
         "run_id": str(created["run_id"]),
         "repo": "acme/widgets",
         "trigger": "manual",
     }
-    assert fake.agent_launches[0].prompt == (
-        "Fix widget race\n\nTwo updates can overwrite one another."
-    )
+    prompt = fake.agent_launches[0].prompt
+    assert "- Signal: Fix widget race" in prompt
+    assert "<signal_body>\nTwo updates can overwrite one another.\n</signal_body>" in prompt
+    assert f"git checkout -b foresight/signal-{created['id']}-run-{created['run_id']}" in prompt
     assert fake.streamed_sessions[0].base_url == "fake://fake-sandbox-1"

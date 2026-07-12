@@ -1,6 +1,8 @@
+import json
 from collections import deque
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, replace
+from typing import Any
 
 from executor.protocol import (
     AgentEvent,
@@ -26,6 +28,8 @@ DEFAULT_RESULT = AgentResult(
 @dataclass(frozen=True)
 class FakeExecutorScript:
     event_batches: Iterable[Iterable[AgentEvent]] | None = None
+    session_messages: list[dict[str, Any]] | None = None
+    result_file: str | None = None
     setup_failure: str | None = None
     sandbox_dies: bool = False
     interrupt_before_launch_once: bool = False
@@ -51,6 +55,13 @@ class FakeExecutor:
         event_batches = script.event_batches
         self._scripts = deque([list(events) for events in event_batches] if event_batches else [])
         self._use_default_script = event_batches is None
+        if script.session_messages is not None:
+            self._session_messages = script.session_messages
+        elif event_batches is None:
+            self._session_messages = _result_messages(DEFAULT_RESULT)
+        else:
+            self._session_messages = []
+        self._result_file = script.result_file
         self._setup_failure = script.setup_failure
         self._sandbox_dies = script.sandbox_dies
         self._interrupt_before_launch_once = script.interrupt_before_launch_once
@@ -74,7 +85,10 @@ class FakeExecutor:
     @classmethod
     def succeeding(cls, result: AgentResult) -> "FakeExecutor":
         return cls(
-            FakeExecutorScript(event_batches=[[AgentEvent(kind="session.idle", result=result)]])
+            FakeExecutorScript(
+                event_batches=[[AgentEvent(kind="session.idle")]],
+                session_messages=_result_messages(result),
+            )
         )
 
     def create_sandbox(self, spec: SandboxSpec) -> SandboxHandle:
@@ -152,7 +166,7 @@ class FakeExecutor:
         if self._scripts:
             events = self._scripts.popleft()
         elif self._use_default_script:
-            events = [AgentEvent(kind="session.idle", result=DEFAULT_RESULT)]
+            events = [AgentEvent(kind="session.idle")]
         else:
             raise RuntimeError("FakeExecutor has no script for this run")
 
@@ -160,6 +174,20 @@ class FakeExecutor:
             replace(event, session_id=session.session_id) if event.session_id is None else event
             for event in events
         )
+
+    def get_session_messages(
+        self,
+        handle: SandboxHandle,
+        session: AgentSession,
+    ) -> list[dict[str, Any]]:
+        self.calls.append("get_session_messages")
+        return self._session_messages
+
+    def read_file(self, handle: SandboxHandle, path: str) -> str | None:
+        self.calls.append("read_file")
+        if path != "/tmp/foresight/result.json":
+            return None
+        return self._result_file
 
     def destroy(self, handle: SandboxHandle) -> None:
         self.calls.append("destroy")
@@ -174,3 +202,23 @@ class FakeExecutor:
             self._after_list_once = None
             callback()
         return inventory
+
+
+def _result_messages(result: AgentResult) -> list[dict[str, Any]]:
+    payload = {
+        "status": result.status,
+        "pr_url": result.pr_url or None,
+        "summary": result.summary,
+        "confidence": result.confidence,
+    }
+    return [
+        {
+            "info": {"role": "assistant"},
+            "parts": [
+                {
+                    "type": "text",
+                    "text": f"```foresight-result\n{json.dumps(payload)}\n```",
+                }
+            ],
+        }
+    ]

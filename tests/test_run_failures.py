@@ -93,7 +93,14 @@ def test_agent_reported_failure_records_reason_and_result() -> None:
     assert run.failure_reason == FailureReason.AGENT_REPORTED_FAILED
     assert run.result_status == ResultStatus.FAILED
     assert run.summary == "The upstream API is undocumented."
-    assert fake.calls == ["create_sandbox", "launch_agent", "stream_events", "destroy"]
+    assert fake.calls == [
+        "create_sandbox",
+        "launch_agent",
+        "stream_events",
+        "get_session_messages",
+        "read_file",
+        "destroy",
+    ]
 
 
 @pytest.mark.django_db
@@ -122,7 +129,14 @@ def test_agent_reported_blocked_records_reason_and_result() -> None:
     assert run.failure_reason == FailureReason.AGENT_REPORTED_BLOCKED
     assert run.result_status == ResultStatus.BLOCKED
     assert run.summary == "The required service is unreachable."
-    assert fake.calls == ["create_sandbox", "launch_agent", "stream_events", "destroy"]
+    assert fake.calls == [
+        "create_sandbox",
+        "launch_agent",
+        "stream_events",
+        "get_session_messages",
+        "read_file",
+        "destroy",
+    ]
 
 
 @pytest.mark.django_db
@@ -142,7 +156,18 @@ def test_idle_session_without_result_records_reason_and_tears_down() -> None:
     run.refresh_from_db()
     assert run.state == RunState.FAILED
     assert run.failure_reason == FailureReason.NO_RESULT
-    assert fake.calls == ["create_sandbox", "launch_agent", "stream_events", "destroy"]
+    assert run.result_status == ResultStatus.FAILED
+    assert run.pr_url == ""
+    assert run.summary == "Run produced no parseable result."
+    assert run.confidence == 0
+    assert fake.calls == [
+        "create_sandbox",
+        "launch_agent",
+        "stream_events",
+        "get_session_messages",
+        "read_file",
+        "destroy",
+    ]
 
 
 @pytest.mark.django_db
@@ -169,5 +194,14 @@ def test_success_result_without_pr_url_records_no_result() -> None:
     run.refresh_from_db()
     assert run.state == RunState.FAILED
     assert run.failure_reason == FailureReason.NO_RESULT
-    assert run.result_status == ""
-    assert fake.calls == ["create_sandbox", "launch_agent", "stream_events", "destroy"]
+    assert run.result_status == ResultStatus.FAILED
+    assert run.summary == "Run produced no parseable result."
+    assert run.confidence == 0
+    assert fake.calls == [
+        "create_sandbox",
+        "launch_agent",
+        "stream_events",
+        "get_session_messages",
+        "read_file",
+        "destroy",
+    ]

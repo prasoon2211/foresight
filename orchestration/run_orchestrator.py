@@ -2,7 +2,9 @@ from enum import StrEnum
 
 from django.db import transaction
 
+from core.harness import render_harness_prompt
 from core.models import FailureReason, Org, ResultStatus, Run, RunState
+from core.result_contract import ResultSource, resolve_result
 from core.run_control import fail_run
 from executor import (
     AgentLaunch,
@@ -13,6 +15,7 @@ from executor import (
     SandboxSpec,
     SetupFailed,
 )
+from surfaces.github_client import get_github_client
 from surfaces.protocol import SurfaceAdapter
 from surfaces.registry import surface_adapter_for
 
@@ -143,7 +146,7 @@ def orchestrate_run(run_id: int, executor: DurableExecutor) -> RunJobOutcome:
         session = executor.launch_agent(
             handle,
             AgentLaunch(
-                prompt=f"{run.signal.title}\n\n{run.signal.body}",
+                prompt=render_harness_prompt(run),
                 model="fake/model",
                 credentials=run.signal.org.agent_credentials(),
                 server_password=run.server_password,
@@ -178,8 +181,9 @@ def orchestrate_run(run_id: int, executor: DurableExecutor) -> RunJobOutcome:
         session_id=run.agent_session_id,
         base_url=run.agent_base_url,
     )
+    synthesized_result = False
     if not run.result_status:
-        result = None
+        session_completed = False
         try:
             for event in executor.stream_events(handle, session):
                 run.refresh_from_db(fields=["state"])
@@ -198,7 +202,7 @@ def orchestrate_run(run_id: int, executor: DurableExecutor) -> RunJobOutcome:
                     )
                     return RunJobOutcome.FINISHED
                 if event.kind == "session.idle":
-                    result = event.result
+                    session_completed = True
                     break
         except SandboxDied:
             _fail_and_notify(
@@ -208,17 +212,7 @@ def orchestrate_run(run_id: int, executor: DurableExecutor) -> RunJobOutcome:
                 reason=FailureReason.SANDBOX_DIED,
             )
             return RunJobOutcome.FINISHED
-        if result is None:
-            _fail_and_notify(
-                run=run,
-                executor=executor,
-                surface_adapter=surface_adapter,
-                reason=FailureReason.NO_RESULT,
-            )
-            return RunJobOutcome.FINISHED
-        if result.status not in ResultStatus.values or (
-            result.status == ResultStatus.PR_OPENED and not result.pr_url
-        ):
+        if not session_completed:
             _fail_and_notify(
                 run=run,
                 executor=executor,
@@ -227,8 +221,23 @@ def orchestrate_run(run_id: int, executor: DurableExecutor) -> RunJobOutcome:
             )
             return RunJobOutcome.FINISHED
 
+        repo_connection = run.signal.repo.surface_connection
+        resolution = resolve_result(
+            transcript=executor.get_session_messages(handle, session),
+            result_file=executor.read_file(handle, "/tmp/foresight/result.json"),
+            github_client=get_github_client() if repo_connection is not None else None,
+            installation_id=(
+                int(repo_connection.identity["installation_id"])
+                if repo_connection is not None
+                else None
+            ),
+            repo_full_name=run.signal.repo.full_name,
+            branch_name=run.branch_name,
+        )
+        result = resolution.result
+
         run.result_status = result.status
-        run.pr_url = result.pr_url
+        run.pr_url = result.pr_url or ""
         run.summary = result.summary
         run.confidence = result.confidence
         run.save(
@@ -240,8 +249,17 @@ def orchestrate_run(run_id: int, executor: DurableExecutor) -> RunJobOutcome:
                 "updated_at",
             ]
         )
+        synthesized_result = resolution.source == ResultSource.SYNTHESIZED
 
     run.refresh_from_db()
+    if synthesized_result:
+        _fail_and_notify(
+            run=run,
+            executor=executor,
+            surface_adapter=surface_adapter,
+            reason=FailureReason.NO_RESULT,
+        )
+        return RunJobOutcome.FINISHED
     if run.result_status == ResultStatus.FAILED:
         _fail_and_notify(
             run=run,
