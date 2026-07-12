@@ -91,3 +91,20 @@ def test_generated_branch_names_are_unique_with_a_predictable_prefix() -> None:
     assert first.branch_name.startswith("foresight/")
     assert second.branch_name.startswith("foresight/")
     assert first.branch_name != second.branch_name
+
+
+@pytest.mark.django_db
+def test_default_prompt_updates_only_apply_to_new_repos(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    org = Org.objects.create(name="Acme")
+    existing = Repo.objects.create(org=org, full_name="acme/existing")
+    original_prompt = existing.harness_prompt
+    updated_prompt = "A newer version of the default prompt."
+    monkeypatch.setattr(Repo._meta.get_field("harness_prompt"), "default", updated_prompt)
+
+    added_after_update = Repo.objects.create(org=org, full_name="acme/new")
+    existing.refresh_from_db()
+
+    assert existing.harness_prompt == original_prompt
+    assert added_after_update.harness_prompt == updated_prompt

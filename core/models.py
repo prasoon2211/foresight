@@ -4,10 +4,9 @@ from django.db import models
 from django.db.models.fields.json import KeyTextTransform
 from encrypted_fields.fields import EncryptedJSONField, EncryptedTextField
 
+from core.harness import DEFAULT_HARNESS_PROMPT
+
 DEFAULT_BASE_SNAPSHOT = "foresight/default"
-DEFAULT_HARNESS_PROMPT = """You are Foresight, an autonomous software engineer.
-Resolve the supplied signal in the connected repository, test the change, and open a pull request.
-"""
 
 
 class IntakeState(models.TextChoices):
