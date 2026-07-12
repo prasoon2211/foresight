@@ -85,13 +85,6 @@ def test_installation_webhooks_activate_connection_and_enable_selected_repos(
     client: Client,
 ) -> None:
     org = Org.objects.create(name="Acme")
-    connection = SurfaceConnection.objects.create(
-        org=org,
-        type=SurfaceType.GITHUB,
-        status=SurfaceConnectionStatus.PENDING,
-        account_label="acme",
-        identity={},
-    )
 
     created_response = post_webhook(client, "installation", "installation_created.json")
     repos_response = post_webhook(
@@ -102,7 +95,7 @@ def test_installation_webhooks_activate_connection_and_enable_selected_repos(
 
     assert created_response.status_code == 202
     assert repos_response.status_code == 202
-    connection.refresh_from_db()
+    connection = SurfaceConnection.objects.get(org=org)
     assert connection.status == SurfaceConnectionStatus.ACTIVE
     assert connection.identity == {
         "installation_id": 12345678,
@@ -326,9 +319,8 @@ def test_merged_pull_request_marks_run_and_signal_done(client: Client) -> None:
         body="Two updates can overwrite one another.",
     )
     run = signal.runs.create(
-        state=RunState.AWAITING_REVIEW,
-        result_status=ResultStatus.PR_OPENED,
-        pr_url="https://github.com/acme/widgets/pull/17",
+        state=RunState.RUNNING,
+        branch_name="foresight/signal-1",
     )
     client.force_login(user)
 
@@ -394,7 +386,8 @@ def test_failed_run_writeback_explains_failure_reason(client: Client) -> None:
         (
             "acme/widgets",
             42,
-            "Foresight could not complete this run. Failure reason: agent_reported_failed",
+            "Foresight could not complete this run. Failure reason: agent_reported_failed. "
+            "The agent could not resolve the issue.",
         ),
     ]
     assert fake_github.label_additions == [

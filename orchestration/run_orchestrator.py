@@ -261,7 +261,7 @@ def orchestrate_run(run_id: int, executor: DurableExecutor) -> RunJobOutcome:
 
     with transaction.atomic():
         current_run = Run.objects.select_for_update().get(pk=run.pk)
-        if current_run.state == RunState.FAILED:
+        if current_run.state != RunState.RUNNING:
             return RunJobOutcome.FINISHED
         current_run.state = RunState.AWAITING_REVIEW
         current_run.save(update_fields=["state", "updated_at"])

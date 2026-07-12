@@ -3,11 +3,13 @@ from typing import Any
 
 from django.conf import settings
 from django.db import transaction
+from django.db.models import Q
 from django.utils.dateparse import parse_datetime
 
 from core.intake import dispatch_signal
 from core.models import (
     ConnectionStatus,
+    Org,
     Repo,
     Run,
     RunState,
@@ -46,6 +48,13 @@ def _process_installation(payload: dict[str, Any]) -> None:
     installation_id = installation["id"]
     account_label = installation["account"]["login"]
     connection = _find_connection(installation_id, account_label)
+    if connection is None and payload["action"] == "created" and Org.objects.count() == 1:
+        connection = SurfaceConnection.objects.create(
+            org=Org.objects.get(),
+            type=SurfaceType.GITHUB,
+            status=SurfaceConnectionStatus.PENDING,
+            account_label=account_label,
+        )
     if connection is None:
         return
 
@@ -151,7 +160,8 @@ def _process_pull_request(payload: dict[str, Any]) -> None:
     Run.objects.filter(
         signal__repo__surface_connection=connection,
         signal__repo__full_name=payload["repository"]["full_name"],
-        pr_url=pull_request["html_url"],
+    ).filter(
+        Q(pr_url=pull_request["html_url"]) | Q(branch_name=pull_request["head"]["ref"])
     ).update(
         pr_merged_at=merged_at,
         state=RunState.DONE,
@@ -314,8 +324,12 @@ class GitHubSurfaceAdapter:
     @staticmethod
     def _finish_comment(run: Run) -> str:
         if run.state == RunState.FAILED:
-            reason = getattr(run, "failure_reason", "") or run.summary or "Unknown failure."
-            return f"Foresight could not complete this run. Failure reason: {reason}"
+            reason = run.failure_reason or "unknown"
+            explanation = run.failure_detail or run.summary
+            comment = f"Foresight could not complete this run. Failure reason: {reason}"
+            if explanation:
+                comment += f". {explanation}"
+            return comment
         pull_number = run.pr_url.rstrip("/").rsplit("/", 1)[-1]
         return (
             f"Foresight finished this run and opened [pull request #{pull_number}]({run.pr_url})."
