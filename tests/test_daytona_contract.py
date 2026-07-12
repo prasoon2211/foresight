@@ -71,7 +71,10 @@ def test_real_daytona_smoke_contract(tmp_path: Path, monkeypatch: pytest.MonkeyP
                 resources=Resources(cpu=4, memory_gib=8, disk_gib=10),
             )
         )
-        assert executor.read_file(handle, "/tmp/foresight/setup.log") == "setup-complete"
+        setup_output = executor.read_file(handle, "/tmp/foresight/setup.log")
+        assert setup_output is not None
+        assert "FETCH_HEAD" in setup_output
+        assert setup_output.endswith("setup-complete")
 
         session = executor.launch_agent(
             handle,
