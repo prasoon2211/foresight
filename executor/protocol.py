@@ -91,7 +91,7 @@ class AgentEvent:
 
 class Executor(Protocol):
     def create_sandbox(self, spec: SandboxSpec) -> SandboxHandle:
-        """Create a labeled sandbox recoverable through list_sandboxes."""
+        """Create a sandbox carrying the supplied provider labels."""
         ...
 
     def launch_agent(
@@ -122,4 +122,4 @@ class SandboxInventory(Protocol):
 
 
 class DurableExecutor(Executor, SandboxInventory, Protocol):
-    """Executor plus provider-wide inventory used for recovery and reconciliation."""
+    """Five-verb executor plus provider inventory for recovery and reconciliation."""

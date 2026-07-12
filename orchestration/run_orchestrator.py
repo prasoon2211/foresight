@@ -82,12 +82,19 @@ def orchestrate_run(run_id: int, executor: DurableExecutor) -> RunJobOutcome:
                 detail=error.detail,
             )
             return RunJobOutcome.FINISHED
-        run.refresh_from_db(fields=["state"])
-        if run.state == RunState.FAILED:
+        with transaction.atomic():
+            run = (
+                Run.objects.select_for_update()
+                .select_related("signal__repo", "signal__org")
+                .get(pk=run.pk)
+            )
+            canceled = run.state == RunState.FAILED
+            if not canceled:
+                run.sandbox_id = handle.sandbox_id
+                run.save(update_fields=["sandbox_id", "updated_at"])
+        if canceled:
             executor.destroy(handle)
             return RunJobOutcome.FINISHED
-        run.sandbox_id = handle.sandbox_id
-        run.save(update_fields=["sandbox_id", "updated_at"])
 
     run.refresh_from_db()
     if run.state == RunState.FAILED:
@@ -107,13 +114,23 @@ def orchestrate_run(run_id: int, executor: DurableExecutor) -> RunJobOutcome:
                 },
             ),
         )
-        run.refresh_from_db(fields=["state"])
-        if run.state == RunState.FAILED:
+        with transaction.atomic():
+            run = Run.objects.select_for_update().get(pk=run.pk)
+            canceled = run.state == RunState.FAILED
+            if not canceled:
+                run.agent_session_id = session.session_id
+                run.agent_base_url = session.base_url
+                run.state = RunState.RUNNING
+                run.save(
+                    update_fields=[
+                        "agent_session_id",
+                        "agent_base_url",
+                        "state",
+                        "updated_at",
+                    ]
+                )
+        if canceled:
             return RunJobOutcome.FINISHED
-        run.agent_session_id = session.session_id
-        run.agent_base_url = session.base_url
-        run.state = RunState.RUNNING
-        run.save(update_fields=["agent_session_id", "agent_base_url", "state", "updated_at"])
 
     run.refresh_from_db()
     session = AgentSession(

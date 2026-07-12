@@ -22,7 +22,13 @@ def reconcile_sandboxes(executor: DurableExecutor) -> None:
         .exclude(sandbox_id="")
         .exclude(sandbox_id__in=provider_sandbox_ids)
     )
+    if missing_runs:
+        provider_sandbox_ids.update(
+            sandbox.handle.sandbox_id for sandbox in executor.list_sandboxes()
+        )
     for run in missing_runs:
+        if run.sandbox_id in provider_sandbox_ids:
+            continue
         fail_run(
             run=run,
             executor=executor,

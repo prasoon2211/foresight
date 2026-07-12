@@ -35,6 +35,7 @@ class FakeExecutorScript:
     before_stream: Callable[[], None] | None = None
     after_create: Callable[[], None] | None = None
     after_launch: Callable[[], None] | None = None
+    after_list_once: Callable[[], None] | None = None
 
 
 class FakeExecutor:
@@ -59,6 +60,7 @@ class FakeExecutor:
         self._before_stream = script.before_stream
         self._after_create = script.after_create
         self._after_launch = script.after_launch
+        self._after_list_once = script.after_list_once
         self._next_sandbox = 1
         self._next_session = 1
         self._destroyed: set[str] = set()
@@ -166,4 +168,9 @@ class FakeExecutor:
 
     def list_sandboxes(self) -> list[SandboxRecord]:
         self.calls.append("list_sandboxes")
-        return list(self._inventory.values())
+        inventory = list(self._inventory.values())
+        if self._after_list_once is not None:
+            callback = self._after_list_once
+            self._after_list_once = None
+            callback()
+        return inventory

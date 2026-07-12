@@ -47,7 +47,7 @@ def reconciliation_sweep(timestamp: int) -> None:
 
 
 @app.periodic(cron="* * * * *")
-@app.task
+@app.task(queueing_lock="requeue-stalled-run-jobs")
 async def requeue_stalled_run_jobs(timestamp: int) -> None:
     del timestamp
     stalled_jobs = await app.job_manager.get_stalled_jobs(task_name=run_orchestrator.name)
