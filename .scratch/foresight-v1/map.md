@@ -39,6 +39,7 @@ Settled during spec assembly (grilled live with the user; no ticket):
 - **Design for agents — API-first** — the API is the product, the web UI one client of it; no UI-only capabilities, ever. Org-scoped API tokens (hashed at rest) ship in V1 so agents (e.g. Claude Code on a user's machine) can drive Foresight directly. MCP server = V2 thin wrapper over the OpenAPI surface; run-scoped in-sandbox tokens = V2 (enables agent-spawned runs).
 - **Hierarchical runs (V2, modeled now)** — children are Runs on the same signal with a nullable `parent_run` self-FK; the one-active-run index becomes one-active-*root*-run; org concurrency cap counts children. The agent is the orchestrator (spawns/monitors children via the API); the control plane stays a flat one-job-per-run launcher — a further argument against a heavyweight workflow engine. No V1 column; recorded on ticket 04.
 - **Remaining fog resolved inline in [spec.md](spec.md)** — snapshot rebuild/staleness policy, repo onboarding flow, dashboard IA, failure taxonomy + retry semantics: all defaulted in the spec's Implementation Decisions.
+- [V1 spec assembly and issue slicing](issues/06-spec-assembly.md) — **destination reached**: [spec.md](spec.md) published (`ready-for-agent`) and the build sliced into implementation issues 07–16 — tracer-bullet vertical slices, re-cut 2026-07-12 from the original layer-based 07–18 (dependency graph and re-slice rationale on the ticket). The map's work is done; building proceeds issue by issue.
 
 ## Defaults taken
 
