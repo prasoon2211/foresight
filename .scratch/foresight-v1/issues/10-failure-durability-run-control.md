@@ -8,7 +8,7 @@ No automatic retries — that's a spec decision, not an omission. Manual re-run 
 
 **Blocked by:** 08 — Tracer bullet.
 
-**Status:** ready-for-agent
+**Status:** claimed
 
 - [ ] One test per failure reason, each just a differently-scripted fake executor (setup script fails, sandbox dies mid-stream, agent session errors, agent reports failed/blocked, idle without result)
 - [ ] Durability: kill the orchestrator after sandbox creation and again after agent launch; re-invoke; exactly-once effects (one sandbox, one session, correct terminal state)
