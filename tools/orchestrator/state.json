@@ -1,10 +1,14 @@
 {
   "tickets": {
     "07": {
-      "status": "launched",
+      "status": "merged",
       "agentId": "bc-3e1c5584-9484-4b64-a507-df728ad337de",
       "runId": "run-490f8cef-231f-440c-8608-805e88355c51",
-      "launchedAt": "2026-07-12T14:16:36.692Z"
+      "launchedAt": "2026-07-12T14:16:36.692Z",
+      "prUrl": "https://github.com/prasoon2211/foresight/pull/3",
+      "branch": "cursor/backend-scaffold-37de",
+      "finishedAt": "2026-07-12T14:36:58.964Z",
+      "mergedAt": "2026-07-12T14:44:46.669Z"
     }
   }
 }

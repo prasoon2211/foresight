@@ -29,7 +29,7 @@ class Executor(Protocol):
 
 **Blocked by:** 07 — Backend scaffold.
 
-**Status:** ready-for-agent
+**Status:** claimed
 
 - [ ] The spec's canonical test shape passes: create a manual signal via the API → run jobs in-process with the fake executor scripted to succeed → run walked `queued → provisioning → running → awaiting_review` with result columns filled
 - [ ] A concurrent second run for the same signal is rejected by the database index, not by application code
