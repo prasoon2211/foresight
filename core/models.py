@@ -97,6 +97,7 @@ class Run(models.Model):
     )
     sandbox_id = models.CharField(max_length=255, blank=True)
     agent_session_id = models.CharField(max_length=255, blank=True)
+    agent_base_url = models.CharField(max_length=1000, blank=True)
     server_password = models.CharField(max_length=255, blank=True)
     branch_name = models.CharField(max_length=255, blank=True)
     result_status = models.CharField(max_length=30, choices=ResultStatus, blank=True)

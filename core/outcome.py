@@ -19,7 +19,7 @@ def derive_outcome_status(
         return intake_state
 
     outcomes = list(runs)
-    if any(outcome.pr_merged or outcome.state == RunState.DONE for outcome in outcomes):
+    if any(outcome.pr_merged for outcome in outcomes):
         return RunState.DONE
     if outcomes:
         return outcomes[-1].state

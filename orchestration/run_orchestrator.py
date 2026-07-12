@@ -51,13 +51,14 @@ def orchestrate_run(run_id: int, executor: Executor) -> None:
             ),
         )
         run.agent_session_id = session.session_id
+        run.agent_base_url = session.base_url
         run.state = RunState.RUNNING
-        run.save(update_fields=["agent_session_id", "state", "updated_at"])
+        run.save(update_fields=["agent_session_id", "agent_base_url", "state", "updated_at"])
 
     run.refresh_from_db()
     session = AgentSession(
         session_id=run.agent_session_id,
-        base_url=f"executor://{run.sandbox_id}",
+        base_url=run.agent_base_url,
     )
     if not run.result_status:
         result = next(

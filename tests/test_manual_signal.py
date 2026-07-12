@@ -96,3 +96,4 @@ def test_manual_signal_runs_to_awaiting_review_over_the_api(client: Client) -> N
     assert fake.agent_launches[0].prompt == (
         "Fix widget race\n\nTwo updates can overwrite one another."
     )
+    assert fake.streamed_sessions[0].base_url == "fake://fake-sandbox-1"
