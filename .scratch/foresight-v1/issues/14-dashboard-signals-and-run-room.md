@@ -6,7 +6,7 @@ The API additions this behavior needs land here with it, honoring API-first: att
 
 **Blocked by:** 09 — Auth (login, org context); 10 — Run control (stop, re-run); 11 — GitHub surface (real signals to show); 13 — Daytona (real attach endpoints to mint).
 
-**Status:** ready-for-agent
+**Status:** claimed
 
 - [ ] API tests for every new capability: attach-URL minting calls the executor and never caches, websocket-proxy auth enforced, live state reflects Run-row changes, transcript retrieval, revive-when-available
 - [ ] Playthrough against a locally running backend: a labeled-issue signal appears in the list, its run watched live, terminal attached, a run stopped, a signal re-run, result card and transcript render
