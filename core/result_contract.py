@@ -91,8 +91,8 @@ def _parse_result(raw: str | None) -> AgentResult | None:
     if raw is None:
         return None
     try:
-        payload = json.loads(raw)
-    except (json.JSONDecodeError, TypeError):
+        payload = json.loads(raw, parse_constant=_reject_non_json_constant)
+    except (ValueError, TypeError):
         return None
     if not isinstance(payload, dict) or not RESULT_VALIDATOR.is_valid(payload):
         return None
@@ -115,3 +115,7 @@ def _parse_result(raw: str | None) -> AgentResult | None:
         summary=summary,
         confidence=float(confidence),
     )
+
+
+def _reject_non_json_constant(value: str) -> None:
+    raise ValueError(f"{value} is not valid JSON")

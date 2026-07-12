@@ -120,6 +120,12 @@ def test_malformed_result_block_falls_through_to_result_file() -> None:
         {
             "status": "failed",
             "pr_url": None,
+            "summary": "Non-JSON confidence.",
+            "confidence": float("nan"),
+        },
+        {
+            "status": "failed",
+            "pr_url": None,
             "summary": "Unexpected property.",
             "confidence": 0.5,
             "extra": True,
