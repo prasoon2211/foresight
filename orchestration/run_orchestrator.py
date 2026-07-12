@@ -60,9 +60,17 @@ def orchestrate_run(run_id: int, executor: DurableExecutor) -> RunJobOutcome:
         return RunJobOutcome.FINISHED
 
     if not run.sandbox_id and run.state == RunState.PROVISIONING:
-        matching_sandboxes = [
+        run_sandboxes = [
             sandbox for sandbox in executor.list_sandboxes() if sandbox.run_id == run.pk
         ]
+        matching_sandboxes = [
+            sandbox
+            for sandbox in run_sandboxes
+            if sandbox.labels.get("provisioning_complete") == "true"
+        ]
+        for incomplete in run_sandboxes:
+            if incomplete.labels.get("provisioning_complete") != "true":
+                executor.destroy(incomplete.handle)
         if matching_sandboxes:
             run.refresh_from_db(fields=["state"])
             if run.state == RunState.FAILED:

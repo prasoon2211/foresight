@@ -24,6 +24,7 @@ x-app-environment: &app-environment
   DAYTONA_API_KEY: ${DAYTONA_API_KEY:-}
   OPENCODE_VERSION: ${OPENCODE_VERSION:-1.17.18}
   OPENCODE_MODEL: ${OPENCODE_MODEL:-anthropic/claude-sonnet-4-5}
+  SESSION_EXPORT_ROOT: /var/lib/foresight/session-exports
   GITHUB_APP_ID: ${GITHUB_APP_ID:-}
   GITHUB_APP_PRIVATE_KEY: ${GITHUB_APP_PRIVATE_KEY:-}
   GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET:-}
@@ -35,6 +36,8 @@ x-app-service: &app-service
   build:
     context: .
   environment: *app-environment
+  volumes:
+    - session-exports:/var/lib/foresight/session-exports
   depends_on:
     migrate:
       condition: service_completed_successfully
@@ -95,3 +98,4 @@ services:
 
 volumes:
   postgres-data:
+  session-exports:

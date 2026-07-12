@@ -113,7 +113,7 @@ class FakeExecutor:
         self._next_sandbox += 1
         self._inventory[handle.sandbox_id] = SandboxRecord(
             handle=handle,
-            labels=dict(spec.labels),
+            labels={**spec.labels, "provisioning_complete": "true"},
         )
         if self._after_create is not None:
             self._after_create()

@@ -182,6 +182,7 @@ class DaytonaExecutor:
                 if response.exit_code != 0:
                     raise SetupFailed(output or f"setup exited {response.exit_code}")
             sandbox.fs.upload_file(output.encode(), SETUP_LOG_PATH)
+            sandbox.set_labels({**spec.labels, "provisioning_complete": "true"})
         except SetupFailed:
             self._retire_failed_sandbox(sandbox, spec)
             raise
@@ -249,7 +250,12 @@ class DaytonaExecutor:
 
         title = f"Foresight {handle.sandbox_id}"
         session_id = self._existing_session(preview.url, headers, auth, title)
-        created = session_id is None
+        prompt_submitted = session_id is not None and self._session_has_user_message(
+            preview.url,
+            headers,
+            auth,
+            session_id,
+        )
         if session_id is None:
             response = self._http.post(
                 f"{preview.url.rstrip('/')}/session",
@@ -259,7 +265,7 @@ class DaytonaExecutor:
             )
             response.raise_for_status()
             session_id = str(response.json()["id"])
-        if created:
+        if not prompt_submitted:
             event_stream = self._http.stream(
                 "GET",
                 f"{preview.url.rstrip('/')}/global/event",
@@ -520,6 +526,21 @@ class DaytonaExecutor:
             if session.get("title") == title:
                 return str(session["id"])
         return None
+
+    def _session_has_user_message(
+        self,
+        base_url: str,
+        headers: dict[str, str],
+        auth: tuple[str, str],
+        session_id: str,
+    ) -> bool:
+        response = self._http.get(
+            f"{base_url.rstrip('/')}/session/{quote(session_id, safe='')}/message",
+            headers=headers,
+            auth=auth,
+        )
+        response.raise_for_status()
+        return any(item.get("info", item).get("role") == "user" for item in response.json())
 
     def _session_completed(
         self,
