@@ -1,17 +1,36 @@
 import pytest
+from django.contrib.auth import get_user_model
 from django.test import Client
 
 from core.intake import create_manual_signal
-from core.models import FailureReason, Org, Repo, RunState
+from core.models import FailureReason, Org, OrgMembership, Repo, RunState
 from executor import FakeExecutor, FakeExecutorScript
 from orchestration.executor_backend import use_executor
 from orchestration.run_orchestrator import orchestrate_run
 
 
-@pytest.mark.django_db
-def test_stop_running_run_via_api_cancels_and_tears_down(client: Client) -> None:
+@pytest.fixture
+def org_context(client: Client) -> tuple[Client, Org, Repo]:
+    user = get_user_model().objects.create_user(
+        username="run-controller",
+        email="run-controller@example.com",
+    )
     org = Org.objects.create(name="Acme")
+    OrgMembership.objects.create(
+        org=org,
+        user=user,
+        role=OrgMembership.Role.MEMBER,
+    )
     repo = Repo.objects.create(org=org, full_name="acme/widgets")
+    client.force_login(user)
+    return client, org, repo
+
+
+@pytest.mark.django_db
+def test_stop_running_run_via_api_cancels_and_tears_down(
+    org_context: tuple[Client, Org, Repo],
+) -> None:
+    client, org, repo = org_context
     _, run = create_manual_signal(
         repo=repo,
         title="Fix widgets",
@@ -21,7 +40,7 @@ def test_stop_running_run_via_api_cancels_and_tears_down(client: Client) -> None
     stop_responses = []
 
     def stop_while_streaming() -> None:
-        stop_responses.append(client.post(f"/api/runs/{run.pk}/stop"))
+        stop_responses.append(client.post(f"/api/orgs/{org.pk}/runs/{run.pk}/stop"))
 
     fake = FakeExecutor(FakeExecutorScript(before_stream=stop_while_streaming))
     with use_executor(fake):
@@ -46,10 +65,9 @@ def test_stop_running_run_via_api_cancels_and_tears_down(client: Client) -> None
 
 @pytest.mark.django_db
 def test_stop_during_sandbox_creation_destroys_newly_created_sandbox(
-    client: Client,
+    org_context: tuple[Client, Org, Repo],
 ) -> None:
-    org = Org.objects.create(name="Acme")
-    repo = Repo.objects.create(org=org, full_name="acme/widgets")
+    client, org, repo = org_context
     _, run = create_manual_signal(
         repo=repo,
         title="Fix widgets",
@@ -58,7 +76,7 @@ def test_stop_during_sandbox_creation_destroys_newly_created_sandbox(
     )
 
     def stop_after_creation() -> None:
-        response = client.post(f"/api/runs/{run.pk}/stop")
+        response = client.post(f"/api/orgs/{org.pk}/runs/{run.pk}/stop")
         assert response.status_code == 200
 
     fake = FakeExecutor(FakeExecutorScript(after_create=stop_after_creation))
@@ -73,9 +91,10 @@ def test_stop_during_sandbox_creation_destroys_newly_created_sandbox(
 
 
 @pytest.mark.django_db
-def test_stop_during_agent_launch_stays_canceled(client: Client) -> None:
-    org = Org.objects.create(name="Acme")
-    repo = Repo.objects.create(org=org, full_name="acme/widgets")
+def test_stop_during_agent_launch_stays_canceled(
+    org_context: tuple[Client, Org, Repo],
+) -> None:
+    client, org, repo = org_context
     _, run = create_manual_signal(
         repo=repo,
         title="Fix widgets",
@@ -84,7 +103,7 @@ def test_stop_during_agent_launch_stays_canceled(client: Client) -> None:
     )
 
     def stop_after_launch() -> None:
-        response = client.post(f"/api/runs/{run.pk}/stop")
+        response = client.post(f"/api/orgs/{org.pk}/runs/{run.pk}/stop")
         assert response.status_code == 200
 
     fake = FakeExecutor(FakeExecutorScript(after_launch=stop_after_launch))
@@ -98,9 +117,10 @@ def test_stop_during_agent_launch_stays_canceled(client: Client) -> None:
 
 
 @pytest.mark.django_db(transaction=True)
-def test_rerun_via_api_creates_fresh_run_and_sandbox(client: Client) -> None:
-    org = Org.objects.create(name="Acme")
-    repo = Repo.objects.create(org=org, full_name="acme/widgets")
+def test_rerun_via_api_creates_fresh_run_and_sandbox(
+    org_context: tuple[Client, Org, Repo],
+) -> None:
+    client, org, repo = org_context
     signal, old_run = create_manual_signal(
         repo=repo,
         title="Fix widgets",
@@ -111,8 +131,8 @@ def test_rerun_via_api_creates_fresh_run_and_sandbox(client: Client) -> None:
     with pytest.raises(RuntimeError, match="worker interrupted"):
         orchestrate_run(old_run.pk, fake)
     with use_executor(fake):
-        stop_response = client.post(f"/api/runs/{old_run.pk}/stop")
-        rerun_response = client.post(f"/api/signals/{signal.pk}/rerun")
+        stop_response = client.post(f"/api/orgs/{org.pk}/runs/{old_run.pk}/stop")
+        rerun_response = client.post(f"/api/orgs/{org.pk}/signals/{signal.pk}/rerun")
 
     assert stop_response.status_code == 200
     assert rerun_response.status_code == 201

@@ -6,13 +6,17 @@ This slice also establishes the agent-legible error convention (structured code 
 
 **Blocked by:** 08 — Tracer bullet.
 
-**Status:** claimed
+**Status:** resolved
 
-- [ ] Signup → email verification → login → org creation → member invite with role, all driven through the real endpoints in tests
-- [ ] Org agent credential and env-style secrets are write-only: accepted on write, never echoed on read
-- [ ] An API token drives the full slice-08 flow (create signal, poll run); a revoked token is rejected
-- [ ] Cross-org isolation: a member of org A gets 404s on org B's signals and runs
-- [ ] Role enforcement: member-forbidden actions (token management, credential changes) rejected for non-admins
-- [ ] OpenAPI schema carries both auth schemes so the generated TypeScript client can use them
+- [x] Signup → email verification → login → org creation → member invite with role, all driven through the real endpoints in tests
+- [x] Org agent credential and env-style secrets are write-only: accepted on write, never echoed on read
+- [x] An API token drives the full slice-08 flow (create signal, poll run); a revoked token is rejected
+- [x] Cross-org isolation: a member of org A gets 404s on org B's signals and runs
+- [x] Role enforcement: member-forbidden actions (token management, credential changes) rejected for non-admins
+- [x] OpenAPI schema carries both auth schemes so the generated TypeScript client can use them
 
 Spec sections: Stack (allauth headless), Domain model (Org, OrgMembership, ApiToken), API-first rule; user stories 1–4, 31–33.
+
+## Comments
+
+2026-07-12: Implemented verified auth, org roles/settings, encrypted secrets, dual authentication, and revocable API tokens in https://github.com/prasoon2211/foresight/pull/5.

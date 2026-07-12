@@ -106,7 +106,7 @@ def orchestrate_run(run_id: int, executor: DurableExecutor) -> RunJobOutcome:
             AgentLaunch(
                 prompt=f"{run.signal.title}\n\n{run.signal.body}",
                 model="fake/model",
-                credentials={},
+                credentials=run.signal.org.agent_credentials(),
                 server_password=run.server_password,
                 output_schema={
                     "type": "object",
