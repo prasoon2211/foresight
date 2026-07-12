@@ -1,6 +1,6 @@
 from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Protocol
 
 
 class SetupFailed(Exception):
@@ -67,6 +67,12 @@ class AgentSession:
 
 
 @dataclass(frozen=True)
+class AgentMessage:
+    role: str
+    text: str
+
+
+@dataclass(frozen=True)
 class AttachEndpoints:
     web_url: str
     api_url: str
@@ -117,7 +123,7 @@ class Executor(Protocol):
         self,
         handle: SandboxHandle,
         session: AgentSession,
-    ) -> list[dict[str, Any]]: ...
+    ) -> list[AgentMessage]: ...
 
     def read_file(self, handle: SandboxHandle, path: str) -> str | None: ...
 

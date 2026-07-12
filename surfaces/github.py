@@ -19,11 +19,25 @@ from core.models import (
     SurfaceConnectionStatus,
     SurfaceType,
 )
-from surfaces.github_client import GitHubClient
+from surfaces.github_client import GitHubClient, get_github_client
 
 RunEnqueuer = Callable[[int], object]
 IN_PROGRESS_LABEL = "foresight:in-progress"
 PR_OPEN_LABEL = "foresight:pr-open"
+
+
+def find_open_pull_request_for_run(run: Run) -> str | None:
+    connection = run.signal.repo.surface_connection
+    if connection is None or connection.type != SurfaceType.GITHUB:
+        return None
+    installation_id = connection.identity.get("installation_id")
+    if installation_id is None:
+        return None
+    return get_github_client().find_open_pull_request(
+        int(installation_id),
+        run.signal.repo.full_name,
+        run.branch_name,
+    )
 
 
 def process_webhook(

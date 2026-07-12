@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -9,6 +10,9 @@ if TYPE_CHECKING:
 
 DEFAULT_HARNESS_PROMPT = (
     Path(__file__).with_name("default_harness_prompt.md").read_text().rstrip("\n") + "\n"
+)
+PROMPT_VARIABLE = re.compile(
+    r"\{\{(signal_title|signal_body|signal_origin_url|repo_full_name|default_branch|branch_name)\}\}"
 )
 
 
@@ -27,7 +31,4 @@ def render_harness_prompt(run: "Run") -> str:
         "default_branch": repo.default_branch,
         "branch_name": run.branch_name,
     }
-    rendered = repo.harness_prompt
-    for name, value in variables.items():
-        rendered = rendered.replace(f"{{{{{name}}}}}", value)
-    return rendered
+    return PROMPT_VARIABLE.sub(lambda match: variables[match.group(1)], repo.harness_prompt)

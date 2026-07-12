@@ -2,11 +2,11 @@ import json
 from collections import deque
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, replace
-from typing import Any
 
 from executor.protocol import (
     AgentEvent,
     AgentLaunch,
+    AgentMessage,
     AgentResult,
     AgentSession,
     AttachEndpoints,
@@ -28,7 +28,7 @@ DEFAULT_RESULT = AgentResult(
 @dataclass(frozen=True)
 class FakeExecutorScript:
     event_batches: Iterable[Iterable[AgentEvent]] | None = None
-    session_messages: list[dict[str, Any]] | None = None
+    session_messages: list[AgentMessage] | None = None
     result_file: str | None = None
     setup_failure: str | None = None
     sandbox_dies: bool = False
@@ -179,7 +179,7 @@ class FakeExecutor:
         self,
         handle: SandboxHandle,
         session: AgentSession,
-    ) -> list[dict[str, Any]]:
+    ) -> list[AgentMessage]:
         self.calls.append("get_session_messages")
         return self._session_messages
 
@@ -204,7 +204,7 @@ class FakeExecutor:
         return inventory
 
 
-def _result_messages(result: AgentResult) -> list[dict[str, Any]]:
+def _result_messages(result: AgentResult) -> list[AgentMessage]:
     payload = {
         "status": result.status,
         "pr_url": result.pr_url or None,
@@ -212,13 +212,8 @@ def _result_messages(result: AgentResult) -> list[dict[str, Any]]:
         "confidence": result.confidence,
     }
     return [
-        {
-            "info": {"role": "assistant"},
-            "parts": [
-                {
-                    "type": "text",
-                    "text": f"```foresight-result\n{json.dumps(payload)}\n```",
-                }
-            ],
-        }
+        AgentMessage(
+            role="assistant",
+            text=f"```foresight-result\n{json.dumps(payload)}\n```",
+        )
     ]

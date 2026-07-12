@@ -5,7 +5,7 @@ from typing import Any, cast
 import pytest
 
 from core.result_contract import ResultSource, resolve_result
-from executor import AgentResult
+from executor import AgentMessage, AgentResult
 from surfaces.github_client import FakeGitHubClient
 
 FIXTURES = Path(__file__).parent / "fixtures" / "transcripts"
@@ -19,18 +19,33 @@ FILE_RESULT = json.dumps(
 )
 
 
-def load_transcript(name: str) -> list[dict[str, Any]]:
-    return cast(list[dict[str, Any]], json.loads((FIXTURES / name).read_text()))
+def load_transcript(name: str) -> list[AgentMessage]:
+    raw_messages = cast(list[dict[str, Any]], json.loads((FIXTURES / name).read_text()))
+    return [
+        AgentMessage(
+            role=str(message["info"]["role"]),
+            text="".join(
+                str(part["text"]) for part in message["parts"] if part.get("type") == "text"
+            ),
+        )
+        for message in raw_messages
+    ]
+
+
+def unexpected_result_file_read() -> str | None:
+    raise AssertionError("valid message result must not read the fallback file")
 
 
 def test_last_result_block_in_final_assistant_message_wins() -> None:
+    github = FakeGitHubClient()
     result = resolve_result(
         transcript=load_transcript("result_block.json"),
-        result_file=FILE_RESULT,
-        github_client=None,
-        installation_id=None,
-        repo_full_name="acme/widgets",
-        branch_name="foresight/signal-1-run-1",
+        read_result_file=unexpected_result_file_read,
+        find_open_pull_request=lambda: github.find_open_pull_request(
+            123,
+            "acme/widgets",
+            "foresight/signal-1-run-1",
+        ),
     )
 
     assert result.result == AgentResult(
@@ -40,16 +55,14 @@ def test_last_result_block_in_final_assistant_message_wins() -> None:
         confidence=0.92,
     )
     assert result.source == ResultSource.MESSAGE
+    assert github.pull_request_lookups == []
 
 
 def test_malformed_result_block_falls_through_to_result_file() -> None:
     result = resolve_result(
         transcript=load_transcript("malformed_result_block.json"),
-        result_file=FILE_RESULT,
-        github_client=None,
-        installation_id=None,
-        repo_full_name="acme/widgets",
-        branch_name="foresight/signal-1-run-1",
+        read_result_file=lambda: FILE_RESULT,
+        find_open_pull_request=lambda: None,
     )
 
     assert result.result == AgentResult(
@@ -77,6 +90,12 @@ def test_malformed_result_block_falls_through_to_result_file() -> None:
             "confidence": 0.5,
         },
         {
+            "status": "pr_opened",
+            "pr_url": "https://github.com/acme/widgets/pull/17 bad",
+            "summary": "Malformed URL.",
+            "confidence": 0.5,
+        },
+        {
             "status": "failed",
             "pr_url": None,
             "summary": "",
@@ -101,24 +120,16 @@ def test_schema_invalid_blocks_fall_through_to_result_file(
     invalid_payload: dict[str, object],
 ) -> None:
     transcript = [
-        {
-            "info": {"role": "assistant"},
-            "parts": [
-                {
-                    "type": "text",
-                    "text": (f"```foresight-result\n{json.dumps(invalid_payload)}\n```"),
-                }
-            ],
-        }
+        AgentMessage(
+            role="assistant",
+            text=f"```foresight-result\n{json.dumps(invalid_payload)}\n```",
+        )
     ]
 
     result = resolve_result(
         transcript=transcript,
-        result_file=FILE_RESULT,
-        github_client=None,
-        installation_id=None,
-        repo_full_name="acme/widgets",
-        branch_name="foresight/signal-1-run-1",
+        read_result_file=lambda: FILE_RESULT,
+        find_open_pull_request=lambda: None,
     )
 
     assert result.result.status == "blocked"
@@ -133,11 +144,12 @@ def test_missing_channels_salvage_an_open_pull_request_from_the_run_branch() -> 
 
     result = resolve_result(
         transcript=[],
-        result_file=None,
-        github_client=github,
-        installation_id=123,
-        repo_full_name="acme/widgets",
-        branch_name=branch_name,
+        read_result_file=lambda: None,
+        find_open_pull_request=lambda: github.find_open_pull_request(
+            123,
+            "acme/widgets",
+            branch_name,
+        ),
     )
 
     assert result.result == AgentResult(
@@ -153,11 +165,8 @@ def test_missing_channels_salvage_an_open_pull_request_from_the_run_branch() -> 
 def test_every_missing_channel_synthesizes_zero_confidence_failure() -> None:
     result = resolve_result(
         transcript=[],
-        result_file=None,
-        github_client=FakeGitHubClient(),
-        installation_id=123,
-        repo_full_name="acme/widgets",
-        branch_name="foresight/signal-1-run-1",
+        read_result_file=lambda: None,
+        find_open_pull_request=lambda: None,
     )
 
     assert result.result == AgentResult(

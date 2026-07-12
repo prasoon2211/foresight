@@ -98,7 +98,6 @@ def test_agent_reported_failure_records_reason_and_result() -> None:
         "launch_agent",
         "stream_events",
         "get_session_messages",
-        "read_file",
         "destroy",
     ]
 
@@ -134,7 +133,6 @@ def test_agent_reported_blocked_records_reason_and_result() -> None:
         "launch_agent",
         "stream_events",
         "get_session_messages",
-        "read_file",
         "destroy",
     ]
 

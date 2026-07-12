@@ -15,7 +15,7 @@ from executor import (
     SandboxSpec,
     SetupFailed,
 )
-from surfaces.github_client import get_github_client
+from surfaces.github import find_open_pull_request_for_run
 from surfaces.protocol import SurfaceAdapter
 from surfaces.registry import surface_adapter_for
 
@@ -221,18 +221,13 @@ def orchestrate_run(run_id: int, executor: DurableExecutor) -> RunJobOutcome:
             )
             return RunJobOutcome.FINISHED
 
-        repo_connection = run.signal.repo.surface_connection
         resolution = resolve_result(
             transcript=executor.get_session_messages(handle, session),
-            result_file=executor.read_file(handle, "/tmp/foresight/result.json"),
-            github_client=get_github_client() if repo_connection is not None else None,
-            installation_id=(
-                int(repo_connection.identity["installation_id"])
-                if repo_connection is not None
-                else None
+            read_result_file=lambda: executor.read_file(
+                handle,
+                "/tmp/foresight/result.json",
             ),
-            repo_full_name=run.signal.repo.full_name,
-            branch_name=run.branch_name,
+            find_open_pull_request=lambda: find_open_pull_request_for_run(run),
         )
         result = resolution.result
 
