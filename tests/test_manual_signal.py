@@ -94,7 +94,11 @@ def test_manual_signal_runs_to_awaiting_review_over_the_api(
         orchestrate_run(created["run_id"], fake)
 
     assert run_response.status_code == 200
-    assert run_response.json() == {
+    run_payload = run_response.json()
+    assert run_payload.pop("created_at")
+    assert run_payload.pop("updated_at")
+    assert run_payload.pop("sandbox_archived_at")
+    assert run_payload == {
         "id": created["run_id"],
         "signal_id": created["id"],
         "state": RunState.AWAITING_REVIEW,
@@ -106,20 +110,25 @@ def test_manual_signal_runs_to_awaiting_review_over_the_api(
             "summary": "Fixed the widget race.",
             "confidence": 0.92,
         },
+        "has_transcript": True,
+        "revivable": True,
     }
     assert signals_response.status_code == 200
-    assert signals_response.json() == [
-        {
-            "id": created["id"],
-            "repo_id": repo.id,
-            "source": "manual",
-            "title": "Fix widget race",
-            "body": "Two updates can overwrite one another.",
-            "intake_state": "dispatched",
-            "outcome_status": RunState.AWAITING_REVIEW,
-            "stranded": False,
-        }
-    ]
+    signal_payload = signals_response.json()[0]
+    assert signal_payload.pop("created_at")
+    assert signal_payload == {
+        "id": created["id"],
+        "repo_id": repo.id,
+        "repo_full_name": "acme/widgets",
+        "source": "manual",
+        "title": "Fix widget race",
+        "body": "Two updates can overwrite one another.",
+        "origin_url": "",
+        "intake_state": "dispatched",
+        "outcome_status": RunState.AWAITING_REVIEW,
+        "stranded": False,
+    }
+    assert len(signals_response.json()) == 1
     assert [call for call in fake.calls if call != "list_sandboxes"] == [
         "create_sandbox",
         "read_file",

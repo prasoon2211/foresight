@@ -12,10 +12,12 @@ from api.auth import (
     session_auth,
 )
 from api.errors import API_ERROR_STATUSES, ApiError, ApiErrorOut
+from api.run_room import is_revivable, mint_attach_endpoints, revive_run_sandbox
 from api.schemas import (
     ApiTokenCreatedOut,
     ApiTokenCreateIn,
     ApiTokenOut,
+    AttachEndpointsOut,
     CreatedSignalOut,
     ManualSignalIn,
     OrgCreateIn,
@@ -28,8 +30,10 @@ from api.schemas import (
     RepoSettingsIn,
     RunOut,
     RunResultOut,
+    SessionTranscriptOut,
     SetupVerificationOut,
     SignalOut,
+    TranscriptMessageOut,
 )
 from core.api_tokens import mint_api_token, revoke_api_token
 from core.intake import SnapshotNotReady, create_manual_signal, rerun_signal
@@ -43,6 +47,7 @@ from core.organizations import (
 )
 from core.outcome import RunOutcome, derive_outcome_status, derive_stranded
 from core.run_control import stop_run
+from core.session_exports import SessionExportUnavailable, load_session_export
 from core.snapshots import request_snapshot_build, verify_repo_setup
 from orchestration.executor_backend import get_executor
 from orchestration.tasks import enqueue_run_orchestrator, enqueue_snapshot_build
@@ -68,6 +73,11 @@ def _run_out(run: Run) -> RunOut:
         failure_reason=run.failure_reason,
         failure_detail=run.failure_detail,
         result=result,
+        has_transcript=bool(run.session_export_path),
+        revivable=is_revivable(run),
+        sandbox_archived_at=run.sandbox_archived_at,
+        created_at=run.created_at,
+        updated_at=run.updated_at,
     )
 
 
@@ -92,9 +102,11 @@ def signal_out(signal: Signal) -> SignalOut:
     return SignalOut(
         id=signal.pk,
         repo_id=signal.repo_id,
+        repo_full_name=signal.repo.full_name,
         source=signal.source,
         title=signal.title,
         body=signal.body,
+        origin_url=str(signal.origin_reference.get("url", "")),
         intake_state=signal.intake_state,
         outcome_status=derive_outcome_status(
             signal.intake_state,
@@ -106,6 +118,7 @@ def signal_out(signal: Signal) -> SignalOut:
             ),
         ),
         stranded=derive_stranded(signal.repo.connection_status),
+        created_at=signal.created_at,
     )
 
 
@@ -123,6 +136,7 @@ def repo_out(repo: Repo) -> RepoOut:
         id=repo.pk,
         full_name=repo.full_name,
         default_branch=repo.default_branch,
+        connection_status=repo.connection_status,
         has_env=bool(repo.env),
         base_snapshot=repo.base_snapshot,
         snapshot_build_status=repo.snapshot_build_status,
@@ -130,6 +144,34 @@ def repo_out(repo: Repo) -> RepoOut:
         setup_verification_status=repo.setup_verification_status,
         setup_verification_output=repo.setup_verification_output,
     )
+
+
+@router.get(
+    "/orgs",
+    auth=org_auth,
+    response={200: list[OrgOut], API_ERROR_STATUSES: ApiErrorOut},
+)
+def list_organizations(request: AuthenticatedRequest) -> list[OrgOut]:
+    if isinstance(request.auth, ApiToken):
+        return [
+            OrgOut(
+                id=request.auth.org_id,
+                name=request.auth.org.name,
+                concurrency_cap=request.auth.org.concurrency_cap,
+                role=OrgMembership.Role.ADMIN,
+            )
+        ]
+    return [
+        OrgOut(
+            id=membership.org_id,
+            name=membership.org.name,
+            concurrency_cap=membership.org.concurrency_cap,
+            role=membership.role,
+        )
+        for membership in OrgMembership.objects.select_related("org")
+        .filter(user=request.auth)
+        .order_by("org__name", "org_id")
+    ]
 
 
 @router.post(
@@ -249,6 +291,19 @@ def get_repo(
     get_org_access(request, org_id)
     repo = get_object_or_404(Repo, pk=repo_id, org_id=org_id)
     return repo_out(repo)
+
+
+@router.get(
+    "/orgs/{org_id}/repos",
+    auth=org_auth,
+    response={200: list[RepoOut], API_ERROR_STATUSES: ApiErrorOut},
+)
+def list_repos(
+    request: AuthenticatedRequest,
+    org_id: int,
+) -> list[RepoOut]:
+    get_org_access(request, org_id)
+    return [repo_out(repo) for repo in Repo.objects.filter(org_id=org_id).order_by("full_name")]
 
 
 @router.patch(
@@ -446,7 +501,9 @@ def list_signals(
     get_org_access(request, org_id)
     return [
         signal_out(signal)
-        for signal in Signal.objects.filter(org_id=org_id).order_by("created_at", "pk")
+        for signal in Signal.objects.select_related("repo")
+        .filter(org_id=org_id)
+        .order_by("-created_at", "-pk")
     ]
 
 
@@ -465,6 +522,21 @@ def get_signal(
 
 
 @router.get(
+    "/orgs/{org_id}/signals/{signal_id}/runs",
+    auth=org_auth,
+    response={200: list[RunOut], API_ERROR_STATUSES: ApiErrorOut},
+)
+def list_signal_runs(
+    request: AuthenticatedRequest,
+    org_id: int,
+    signal_id: int,
+) -> list[RunOut]:
+    get_org_access(request, org_id)
+    signal = get_object_or_404(Signal, pk=signal_id, org_id=org_id)
+    return [_run_out(run) for run in signal.runs.order_by("created_at", "pk")]
+
+
+@router.get(
     "/orgs/{org_id}/runs/{run_id}",
     auth=org_auth,
     response={200: RunOut, API_ERROR_STATUSES: ApiErrorOut},
@@ -477,6 +549,93 @@ def get_run(
     get_org_access(request, org_id)
     run = get_object_or_404(Run, pk=run_id, signal__org_id=org_id)
     return _run_out(run)
+
+
+@router.post(
+    "/orgs/{org_id}/runs/{run_id}/attach",
+    auth=org_auth,
+    response={200: AttachEndpointsOut, API_ERROR_STATUSES: ApiErrorOut},
+)
+def attach_to_run(
+    request: AuthenticatedRequest,
+    org_id: int,
+    run_id: int,
+) -> AttachEndpointsOut:
+    get_org_access(request, org_id)
+    run = get_object_or_404(Run, pk=run_id, signal__org_id=org_id)
+    if not run.sandbox_id or not run.agent_session_id or run.sandbox_archived_at is not None:
+        raise ApiError(
+            status_code=409,
+            code="run_not_attachable",
+            message="This run does not have a live sandbox and agent session.",
+            hint="Wait for the run to start, or revive its archived sandbox.",
+        )
+    endpoints = mint_attach_endpoints(run=run, org_id=org_id, executor=get_executor())
+    return AttachEndpointsOut(
+        web_url=endpoints.web_url,
+        api_url=endpoints.api_url,
+        terminal_websocket_url=endpoints.terminal_websocket_url,
+        tui_command=endpoints.tui_command,
+    )
+
+
+@router.get(
+    "/orgs/{org_id}/runs/{run_id}/transcript",
+    auth=org_auth,
+    response={200: SessionTranscriptOut, API_ERROR_STATUSES: ApiErrorOut},
+)
+def get_run_transcript(
+    request: AuthenticatedRequest,
+    org_id: int,
+    run_id: int,
+) -> SessionTranscriptOut:
+    get_org_access(request, org_id)
+    run = get_object_or_404(Run, pk=run_id, signal__org_id=org_id)
+    if not run.session_export_path:
+        raise ApiError(
+            status_code=404,
+            code="transcript_unavailable",
+            message="This run does not have a stored session transcript.",
+            hint="Wait for the run to finish and try again.",
+        )
+    try:
+        transcript = load_session_export(run_id=run.pk, path=run.session_export_path)
+    except SessionExportUnavailable as error:
+        raise ApiError(
+            status_code=404,
+            code="transcript_unavailable",
+            message="This run's stored session transcript is unavailable.",
+            hint="Check the control-plane session export storage.",
+        ) from error
+    return SessionTranscriptOut(
+        run_id=transcript.run_id,
+        messages=[
+            TranscriptMessageOut(role=message.role, text=message.text)
+            for message in transcript.messages
+        ],
+    )
+
+
+@router.post(
+    "/orgs/{org_id}/runs/{run_id}/revive",
+    auth=org_auth,
+    response={200: RunOut, API_ERROR_STATUSES: ApiErrorOut},
+)
+def revive_run(
+    request: AuthenticatedRequest,
+    org_id: int,
+    run_id: int,
+) -> RunOut:
+    get_org_access(request, org_id)
+    run = get_object_or_404(Run, pk=run_id, signal__org_id=org_id)
+    if not is_revivable(run):
+        raise ApiError(
+            status_code=409,
+            code="sandbox_unavailable",
+            message="This run's archived sandbox is no longer available.",
+            hint="Use the transcript to inspect the finished run.",
+        )
+    return _run_out(revive_run_sandbox(run=run, executor=get_executor()))
 
 
 @router.post(

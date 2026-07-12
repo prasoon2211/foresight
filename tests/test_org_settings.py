@@ -78,6 +78,7 @@ def test_repo_env_is_encrypted_and_write_only(
         "id": repo.id,
         "full_name": "acme/widgets",
         "default_branch": "main",
+        "connection_status": "connected",
         "has_env": True,
         "base_snapshot": "node:22-bookworm",
         "snapshot_build_status": "ready",
