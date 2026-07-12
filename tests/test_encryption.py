@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from collections.abc import Iterator
+
 import pytest
 from django.db import connection, models
 from encrypted_fields.fields import EncryptedTextField
@@ -5,6 +9,7 @@ from encrypted_fields.fields import EncryptedTextField
 
 class EncryptedValue(models.Model):
     value = EncryptedTextField()
+    objects: models.Manager[EncryptedValue] = models.Manager()
 
     class Meta:
         app_label = "core"
@@ -12,7 +17,7 @@ class EncryptedValue(models.Model):
 
 
 @pytest.fixture
-def encrypted_value_table(transactional_db: None) -> None:
+def encrypted_value_table(transactional_db: None) -> Iterator[None]:
     with connection.schema_editor() as schema_editor:
         schema_editor.create_model(EncryptedValue)
     yield

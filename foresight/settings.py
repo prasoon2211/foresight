@@ -10,9 +10,7 @@ SECRET_KEY_FALLBACKS = [
 SALT_KEY = [key for key in os.environ["ENCRYPTION_SALT_KEYS"].split(",") if key]
 
 DEBUG = os.getenv("DJANGO_DEBUG", "false").lower() == "true"
-ALLOWED_HOSTS = os.getenv(
-    "DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1,testserver"
-).split(",")
+ALLOWED_HOSTS = os.getenv("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1,testserver").split(",")
 
 INSTALLED_APPS = [
     "procrastinate.contrib.django",
