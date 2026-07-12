@@ -11,6 +11,10 @@ SALT_KEY = [key for key in os.environ["ENCRYPTION_SALT_KEYS"].split(",") if key]
 
 DEBUG = os.getenv("DJANGO_DEBUG", "false").lower() == "true"
 ALLOWED_HOSTS = os.getenv("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1,testserver").split(",")
+CSRF_TRUSTED_ORIGINS = os.getenv(
+    "DJANGO_CSRF_TRUSTED_ORIGINS",
+    "http://localhost:5173",
+).split(",")
 
 INSTALLED_APPS = [
     "django.contrib.auth",
@@ -64,6 +68,7 @@ OPENCODE_MODEL = os.getenv("OPENCODE_MODEL", "anthropic/claude-sonnet-4-5")
 SESSION_EXPORT_ROOT = Path(
     os.getenv("SESSION_EXPORT_ROOT", str(BASE_DIR / "var" / "session-exports"))
 )
+SANDBOX_RETENTION_DAYS = int(os.getenv("SANDBOX_RETENTION_DAYS", "14"))
 EXECUTOR_TYPE = os.getenv("EXECUTOR_TYPE", "fake")
 
 AUTHENTICATION_BACKENDS = [

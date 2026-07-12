@@ -10,6 +10,7 @@ x-app-environment: &app-environment
   ENCRYPTION_SALT_KEYS: ${ENCRYPTION_SALT_KEYS:-development-only-encryption-salt}
   DJANGO_DEBUG: ${DJANGO_DEBUG:-true}
   DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}
+  DJANGO_CSRF_TRUSTED_ORIGINS: ${DJANGO_CSRF_TRUSTED_ORIGINS:-http://localhost:5173}
   ACCOUNT_CONFIRM_EMAIL_URL: ${ACCOUNT_CONFIRM_EMAIL_URL:-http://localhost:5173/verify-email/{key}}
   DJANGO_EMAIL_BACKEND: ${DJANGO_EMAIL_BACKEND:-django.core.mail.backends.console.EmailBackend}
   DJANGO_EMAIL_HOST: ${DJANGO_EMAIL_HOST:-localhost}

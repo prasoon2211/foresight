@@ -49,13 +49,19 @@ def test_stop_running_run_via_api_cancels_and_retains_sandbox(
     response = stop_responses[0]
 
     assert response.status_code == 200
-    assert response.json() == {
+    payload = response.json()
+    assert payload.pop("created_at")
+    assert payload.pop("updated_at")
+    assert payload.pop("sandbox_archived_at")
+    assert payload == {
         "id": run.pk,
         "signal_id": run.signal_id,
         "state": RunState.FAILED,
         "failure_reason": FailureReason.CANCELED,
         "failure_detail": "",
         "result": None,
+        "has_transcript": True,
+        "revivable": True,
     }
     run.refresh_from_db()
     assert run.state == RunState.FAILED

@@ -53,6 +53,7 @@ class RepoOut(Schema):
     id: int
     full_name: str
     default_branch: str
+    connection_status: str
     has_env: bool
     base_snapshot: str
     snapshot_build_status: str
@@ -101,12 +102,15 @@ class CreatedSignalOut(Schema):
 class SignalOut(Schema):
     id: int
     repo_id: int
+    repo_full_name: str
     source: str
     title: str
     body: str
+    origin_url: str
     intake_state: str
     outcome_status: str
     stranded: bool
+    created_at: datetime
 
 
 class RunResultOut(Schema):
@@ -123,3 +127,28 @@ class RunOut(Schema):
     failure_reason: str
     failure_detail: str
     result: RunResultOut | None
+    has_transcript: bool
+    revivable: bool
+    sandbox_archived_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class AttachEndpointsOut(Schema):
+    web_url: str
+    api_url: str
+    web_username: str
+    web_password: str
+    expires_at: datetime
+    terminal_websocket_url: str
+    tui_command: str
+
+
+class TranscriptMessageOut(Schema):
+    role: str
+    text: str
+
+
+class SessionTranscriptOut(Schema):
+    run_id: int
+    messages: list[TranscriptMessageOut]
