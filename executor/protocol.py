@@ -13,6 +13,10 @@ class SandboxDied(Exception):
     pass
 
 
+class TranscriptUnavailable(Exception):
+    pass
+
+
 @dataclass(frozen=True)
 class EnvFile:
     target_path: str

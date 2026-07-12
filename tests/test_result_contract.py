@@ -5,7 +5,7 @@ from typing import Any, cast
 import pytest
 
 from core.result_contract import ResultSource, resolve_result
-from executor import AgentMessage, AgentResult
+from executor import AgentMessage, AgentResult, TranscriptUnavailable
 from surfaces.github_client import FakeGitHubClient
 
 FIXTURES = Path(__file__).parent / "fixtures" / "transcripts"
@@ -36,10 +36,14 @@ def unexpected_result_file_read() -> str | None:
     raise AssertionError("valid message result must not read the fallback file")
 
 
+def unavailable_transcript() -> list[AgentMessage]:
+    raise TranscriptUnavailable
+
+
 def test_last_result_block_in_final_assistant_message_wins() -> None:
     github = FakeGitHubClient()
     result = resolve_result(
-        transcript=load_transcript("result_block.json"),
+        read_transcript=lambda: load_transcript("result_block.json"),
         read_result_file=unexpected_result_file_read,
         find_open_pull_request=lambda: github.find_open_pull_request(
             123,
@@ -60,7 +64,7 @@ def test_last_result_block_in_final_assistant_message_wins() -> None:
 
 def test_malformed_result_block_falls_through_to_result_file() -> None:
     result = resolve_result(
-        transcript=load_transcript("malformed_result_block.json"),
+        read_transcript=lambda: load_transcript("malformed_result_block.json"),
         read_result_file=lambda: FILE_RESULT,
         find_open_pull_request=lambda: None,
     )
@@ -127,7 +131,7 @@ def test_schema_invalid_blocks_fall_through_to_result_file(
     ]
 
     result = resolve_result(
-        transcript=transcript,
+        read_transcript=lambda: transcript,
         read_result_file=lambda: FILE_RESULT,
         find_open_pull_request=lambda: None,
     )
@@ -143,7 +147,7 @@ def test_missing_channels_salvage_an_open_pull_request_from_the_run_branch() -> 
     )
 
     result = resolve_result(
-        transcript=[],
+        read_transcript=list,
         read_result_file=lambda: None,
         find_open_pull_request=lambda: github.find_open_pull_request(
             123,
@@ -164,7 +168,7 @@ def test_missing_channels_salvage_an_open_pull_request_from_the_run_branch() -> 
 
 def test_every_missing_channel_synthesizes_zero_confidence_failure() -> None:
     result = resolve_result(
-        transcript=[],
+        read_transcript=list,
         read_result_file=lambda: None,
         find_open_pull_request=lambda: None,
     )
@@ -176,3 +180,36 @@ def test_every_missing_channel_synthesizes_zero_confidence_failure() -> None:
         confidence=0,
     )
     assert result.source == ResultSource.SYNTHESIZED
+
+
+def test_unreadable_transcript_falls_through_to_result_file() -> None:
+    result = resolve_result(
+        read_transcript=unavailable_transcript,
+        read_result_file=lambda: FILE_RESULT,
+        find_open_pull_request=lambda: None,
+    )
+
+    assert result.source == ResultSource.FILE
+
+
+def test_schema_accepts_an_absolute_non_http_uri() -> None:
+    transcript = [
+        AgentMessage(
+            role="assistant",
+            text=(
+                "```foresight-result\n"
+                '{"status":"pr_opened","pr_url":"urn:example:pull-request:17",'
+                '"summary":"Opened the pull request.","confidence":0.9}\n'
+                "```"
+            ),
+        )
+    ]
+
+    result = resolve_result(
+        read_transcript=lambda: transcript,
+        read_result_file=unexpected_result_file_read,
+        find_open_pull_request=lambda: None,
+    )
+
+    assert result.source == ResultSource.MESSAGE
+    assert result.result.pr_url == "urn:example:pull-request:17"

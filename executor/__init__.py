@@ -18,6 +18,7 @@ from executor.protocol import (
     SandboxRecord,
     SandboxSpec,
     SetupFailed,
+    TranscriptUnavailable,
 )
 
 __all__ = [
@@ -39,4 +40,5 @@ __all__ = [
     "SandboxRecord",
     "SandboxSpec",
     "SetupFailed",
+    "TranscriptUnavailable",
 ]

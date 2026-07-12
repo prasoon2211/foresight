@@ -4,15 +4,25 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 
-from django.core.exceptions import ValidationError
-from django.core.validators import URLValidator
-
-from executor import AgentMessage, AgentResult
+from executor import AgentMessage, AgentResult, TranscriptUnavailable
 
 RESULT_BLOCK = re.compile(r"```foresight-result\s*\n(.*?)\n```", re.DOTALL)
 RESULT_KEYS = {"status", "pr_url", "summary", "confidence"}
 RESULT_STATUSES = {"pr_opened", "failed", "blocked"}
-RESULT_URL_VALIDATOR = URLValidator(schemes=["http", "https"])
+RESULT_URI = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*:[A-Za-z0-9\-._~:/?#\[\]@!$&'()*+,;=%]*\Z")
+INVALID_PERCENT_ENCODING = re.compile(r"%(?![0-9A-Fa-f]{2})")
+RESULT_SCHEMA: dict[str, object] = {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "required": ["status", "pr_url", "summary", "confidence"],
+    "additionalProperties": False,
+    "properties": {
+        "status": {"enum": sorted(RESULT_STATUSES)},
+        "pr_url": {"type": ["string", "null"], "format": "uri"},
+        "summary": {"type": "string", "minLength": 1},
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+    },
+}
 NO_RESULT = AgentResult(
     status="failed",
     pr_url=None,
@@ -36,11 +46,15 @@ class ResolvedResult:
 
 def resolve_result(
     *,
-    transcript: list[AgentMessage],
+    read_transcript: Callable[[], list[AgentMessage]],
     read_result_file: Callable[[], str | None],
     find_open_pull_request: Callable[[], str | None],
 ) -> ResolvedResult:
     """Resolve a run result through the contract's ordered reporting channels."""
+    try:
+        transcript = read_transcript()
+    except TranscriptUnavailable:
+        transcript = []
     message_result = _result_from_final_assistant_message(transcript)
     if message_result is not None:
         return ResolvedResult(message_result, ResultSource.MESSAGE)
@@ -89,7 +103,7 @@ def _parse_result(raw: str | None) -> AgentResult | None:
     confidence = payload["confidence"]
     if not isinstance(status, str) or status not in RESULT_STATUSES:
         return None
-    if pr_url is not None and not _is_url(pr_url):
+    if pr_url is not None and not _is_uri(pr_url):
         return None
     if status == "pr_opened" and pr_url is None:
         return None
@@ -111,11 +125,12 @@ def _parse_result(raw: str | None) -> AgentResult | None:
     )
 
 
-def _is_url(value: object) -> bool:
+def _is_uri(value: object) -> bool:
     if not isinstance(value, str):
         return False
-    try:
-        RESULT_URL_VALIDATOR(value)
-    except ValidationError:
+    if RESULT_URI.fullmatch(value) is None or INVALID_PERCENT_ENCODING.search(value):
+        return False
+    remainder = value.split(":", 1)[1]
+    if remainder.startswith("//") and not remainder[2:].split("/", 1)[0]:
         return False
     return True

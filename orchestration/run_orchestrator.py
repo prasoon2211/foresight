@@ -4,7 +4,7 @@ from django.db import transaction
 
 from core.harness import render_harness_prompt
 from core.models import FailureReason, Org, ResultStatus, Run, RunState
-from core.result_contract import ResultSource, resolve_result
+from core.result_contract import RESULT_SCHEMA, ResultSource, resolve_result
 from core.run_control import fail_run
 from executor import (
     AgentLaunch,
@@ -150,10 +150,7 @@ def orchestrate_run(run_id: int, executor: DurableExecutor) -> RunJobOutcome:
                 model="fake/model",
                 credentials=run.signal.org.agent_credentials(),
                 server_password=run.server_password,
-                output_schema={
-                    "type": "object",
-                    "required": ["status", "pr_url", "summary", "confidence"],
-                },
+                output_schema=RESULT_SCHEMA,
             ),
         )
         with transaction.atomic():
@@ -222,7 +219,7 @@ def orchestrate_run(run_id: int, executor: DurableExecutor) -> RunJobOutcome:
             return RunJobOutcome.FINISHED
 
         resolution = resolve_result(
-            transcript=executor.get_session_messages(handle, session),
+            read_transcript=lambda: executor.get_session_messages(handle, session),
             read_result_file=lambda: executor.read_file(
                 handle,
                 "/tmp/foresight/result.json",
