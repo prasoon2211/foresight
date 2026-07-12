@@ -8,12 +8,16 @@ No automatic retries — that's a spec decision, not an omission. Manual re-run 
 
 **Blocked by:** 08 — Tracer bullet.
 
-**Status:** claimed
+**Status:** resolved
 
-- [ ] One test per failure reason, each just a differently-scripted fake executor (setup script fails, sandbox dies mid-stream, agent session errors, agent reports failed/blocked, idle without result)
-- [ ] Durability: kill the orchestrator after sandbox creation and again after agent launch; re-invoke; exactly-once effects (one sandbox, one session, correct terminal state)
-- [ ] Stop via the API mid-run → teardown + `failed(canceled)`; re-run via the API → new run, old run untouched, one-active-run index still holds
-- [ ] Concurrency cap: with the cap at one, a second run postpones and starts when the first completes
-- [ ] Reconciliation: an orphaned sandbox in the fake executor's inventory is destroyed by the sweep
+- [x] One test per failure reason, each just a differently-scripted fake executor (setup script fails, sandbox dies mid-stream, agent session errors, agent reports failed/blocked, idle without result)
+- [x] Durability: kill the orchestrator after sandbox creation and again after agent launch; re-invoke; exactly-once effects (one sandbox, one session, correct terminal state)
+- [x] Stop via the API mid-run → teardown + `failed(canceled)`; re-run via the API → new run, old run untouched, one-active-run index still holds
+- [x] Concurrency cap: with the cap at one, a second run postpones and starts when the first completes
+- [x] Reconciliation: an orphaned sandbox in the fake executor's inventory is destroyed by the sweep
 
 Spec sections: Orchestration and durability, Failure taxonomy and retry semantics, Testing Decisions; user stories 23, 27, 28, 35.
+
+## Comments
+
+2026-07-12 — Implemented durable failure handling, stop/re-run APIs, concurrency postponement, stalled-job recovery, and sandbox reconciliation in [PR #6](https://github.com/prasoon2211/foresight/pull/6).
