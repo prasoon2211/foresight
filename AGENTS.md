@@ -42,3 +42,10 @@ The five canonical triage labels are used as-is (`needs-triage`, `needs-info`, `
 ### Domain docs
 
 Single-context: one `CONTEXT.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+
+## Cursor Cloud specific instructions
+
+- The cloud VM (built from `.cursor/Dockerfile`) provides Python 3.12, `uv`, Node 22, and Docker CE. If `docker compose` fails with a daemon error, run `sudo service docker start` first.
+- Docker runs nested inside the VM; the daemon uses `fuse-overlayfs` and legacy iptables. Simple compose stacks (Postgres, web, worker) work normally.
+- Until ticket `.scratch/foresight-v1/issues/07-backend-scaffold.md` lands there is no application code; after it lands, the dev loop is `docker compose up` (web + worker + Postgres) and the Python toolchain is managed with `uv`.
+- Never commit secrets. `CURSOR_API_KEY`, `DAYTONA_API_KEY`, and `OPENAI_API_KEY` may be present as environment variables in cloud VMs; treat them as sensitive.
