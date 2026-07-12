@@ -18,7 +18,6 @@ from daytona import (
 from daytona import (
     Resources as DaytonaResources,
 )
-from django.conf import settings
 
 from executor.protocol import (
     SETUP_LOG_PATH,
@@ -167,7 +166,7 @@ class DaytonaExecutor:
             }
             command = (
                 "nohup opencode serve --hostname 0.0.0.0 "
-                f"--port {AGENT_PORT} --cors {shlex.quote(settings.PUBLIC_BASE_URL)} "
+                f"--port {AGENT_PORT} "
                 ">/tmp/foresight/agent.log 2>&1 </dev/null &"
             )
             sandbox.process.exec(
