@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_DB: foresight
+          POSTGRES_USER: foresight
+          POSTGRES_PASSWORD: foresight
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U foresight -d foresight"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 15
+    env:
+      DJANGO_SECRET_KEY: ci-only-secret-key
+      ENCRYPTION_SALT_KEYS: ci-only-encryption-salt
+      POSTGRES_DB: foresight
+      POSTGRES_USER: foresight
+      POSTGRES_PASSWORD: foresight
+      POSTGRES_HOST: 127.0.0.1
+      POSTGRES_PORT: 5432
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - run: uv sync --locked
+      - run: uv run ruff format --check .
+      - run: uv run ruff check .
+      - run: uv run mypy .
+      - run: uv run pytest

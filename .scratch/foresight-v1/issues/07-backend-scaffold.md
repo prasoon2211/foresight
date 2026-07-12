@@ -6,12 +6,16 @@ Concretely, after this ticket: `docker compose up` yields web + worker + databas
 
 **Blocked by:** None — can start immediately.
 
-**Status:** claimed
+**Status:** resolved
 
-- [ ] `docker compose up` gives a healthy web (ASGI), worker (Procrastinate), and Postgres; all configuration via environment variables with a documented `.env.example`
-- [ ] Test suite green in CI, including one test that enqueues a job inside a transaction and executes it in-process against real Postgres
-- [ ] django-ninja mounted; OpenAPI docs render with a health endpoint
-- [ ] Encrypted-field support configured (keys via environment) and covered by a round-trip test
-- [ ] Lint/format/type-check tooling wired into CI
+- [x] `docker compose up` gives a healthy web (ASGI), worker (Procrastinate), and Postgres; all configuration via environment variables with a documented `.env.example`
+- [x] Test suite green in CI, including one test that enqueues a job inside a transaction and executes it in-process against real Postgres
+- [x] django-ninja mounted; OpenAPI docs render with a health endpoint
+- [x] Encrypted-field support configured (keys via environment) and covered by a round-trip test
+- [x] Lint/format/type-check tooling wired into CI
 
 Spec sections: Architecture, Stack, Testing Decisions. Asset: [Django stack selection](../assets/django-stack-selection.md).
+
+## Comments
+
+2026-07-12 — Built and verified the Django/Postgres/Procrastinate scaffold with API, encryption, test, and CI foundations in [PR #3](https://github.com/prasoon2211/foresight/pull/3).
