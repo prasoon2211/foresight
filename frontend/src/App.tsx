@@ -65,7 +65,10 @@ function DashboardGate() {
         element={<Shell><SignalDetail /></Shell>}
       />
       <Route path="/orgs/:orgId/runs/:runId" element={<Shell><RunRoom /></Shell>} />
-      <Route path="*" element={<Centered>Page not found.</Centered>} />
+      <Route
+        path="*"
+        element={<Navigate to={`/orgs/${orgs.data[0].id}/signals`} replace />}
+      />
     </Routes>
   );
 }

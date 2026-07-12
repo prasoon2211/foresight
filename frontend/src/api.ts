@@ -29,6 +29,13 @@ client.setConfig({
   baseUrl: window.location.origin,
   credentials: "include",
 });
+client.interceptors.request.use((request) => {
+  if (!["GET", "HEAD", "OPTIONS"].includes(request.method)) {
+    const token = cookie("csrftoken");
+    if (token) request.headers.set("X-CSRFToken", token);
+  }
+  return request;
+});
 
 const path = (orgId: number) => ({ org_id: orgId });
 const runPath = (orgId: number, runId: number) => ({
@@ -146,11 +153,34 @@ type AuthResponse = {
   hint?: string;
 };
 
+function cookie(name: string) {
+  const prefix = `${name}=`;
+  return document.cookie
+    .split(";")
+    .map((value) => value.trim())
+    .find((value) => value.startsWith(prefix))
+    ?.slice(prefix.length);
+}
+
+async function csrfToken() {
+  let token = cookie("csrftoken");
+  if (!token) {
+    const response = await fetch("/api/csrf", { credentials: "include" });
+    const payload = (await response.json()) as { csrf_token: string };
+    token = cookie("csrftoken") || payload.csrf_token;
+  }
+  return token;
+}
+
 async function authRequest(pathname: string, body: object): Promise<AuthResponse> {
+  const csrf = await csrfToken();
   const response = await fetch(pathname, {
     method: "POST",
     credentials: "include",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...(csrf ? { "X-CSRFToken": csrf } : {}),
+    },
     body: JSON.stringify(body),
   });
   const payload = (await response.json()) as AuthResponse;

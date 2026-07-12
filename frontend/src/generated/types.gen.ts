@@ -5,6 +5,16 @@ export type ClientOptions = {
 };
 
 /**
+ * CsrfResponse
+ */
+export type CsrfResponse = {
+    /**
+     * Csrf Token
+     */
+    csrf_token: string;
+};
+
+/**
  * HealthResponse
  */
 export type HealthResponse = {
@@ -489,6 +499,22 @@ export type TranscriptMessageOut = {
      */
     text: string;
 };
+
+export type ApiCsrfData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/csrf';
+};
+
+export type ApiCsrfResponses = {
+    /**
+     * OK
+     */
+    200: CsrfResponse;
+};
+
+export type ApiCsrfResponse = ApiCsrfResponses[keyof ApiCsrfResponses];
 
 export type ApiHealthData = {
     body?: never;

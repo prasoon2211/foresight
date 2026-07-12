@@ -21,6 +21,29 @@ from foresight.asgi import application
 from orchestration.executor_backend import use_executor
 
 
+@pytest.mark.django_db
+def test_browser_can_bootstrap_csrf_for_headless_auth(client: Client) -> None:
+    response = client.get("/api/csrf")
+
+    assert response.status_code == 200
+    assert response.json()["csrf_token"]
+    assert response.cookies["csrftoken"].value
+
+    browser = Client(enforce_csrf_checks=True)
+    bootstrap = browser.get("/api/csrf")
+    login = browser.post(
+        "/_allauth/browser/v1/auth/login",
+        data={"email": "missing@example.com", "password": "wrong"},
+        content_type="application/json",
+        headers={
+            "Origin": "http://localhost:5173",
+            "X-CSRFToken": bootstrap.json()["csrf_token"],
+        },
+    )
+    assert login.status_code == 400
+    assert login.headers["Content-Type"] == "application/json"
+
+
 @pytest.fixture
 def run_room(client: Client) -> tuple[Client, Org, Signal, Run]:
     user = get_user_model().objects.create_user(

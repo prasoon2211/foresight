@@ -11,6 +11,10 @@ SALT_KEY = [key for key in os.environ["ENCRYPTION_SALT_KEYS"].split(",") if key]
 
 DEBUG = os.getenv("DJANGO_DEBUG", "false").lower() == "true"
 ALLOWED_HOSTS = os.getenv("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1,testserver").split(",")
+CSRF_TRUSTED_ORIGINS = os.getenv(
+    "DJANGO_CSRF_TRUSTED_ORIGINS",
+    "http://localhost:5173",
+).split(",")
 
 INSTALLED_APPS = [
     "django.contrib.auth",

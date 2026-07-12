@@ -1,4 +1,5 @@
 from django.http import Http404, HttpRequest, HttpResponse
+from django.middleware.csrf import get_token
 from ninja import NinjaAPI, Schema
 from ninja.errors import AuthenticationError, HttpError, ValidationError
 
@@ -86,6 +87,15 @@ def handle_http_error(request: HttpRequest, exc: HttpError) -> HttpResponse:
 
 class HealthResponse(Schema):
     status: str
+
+
+class CsrfResponse(Schema):
+    csrf_token: str
+
+
+@api.get("/csrf", response=CsrfResponse, tags=["system"])
+def csrf(request: HttpRequest) -> CsrfResponse:
+    return CsrfResponse(csrf_token=get_token(request))
 
 
 @api.get("/health", response=HealthResponse, tags=["system"])
