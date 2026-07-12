@@ -8,7 +8,7 @@ This ticket also burns down the interface contract's seven verify-during-build i
 
 **Blocked by:** 08 — Tracer bullet (the protocol and orchestrator); 12 — Result contract (a real run needs the real prompt and extraction).
 
-**Status:** ready-for-agent
+**Status:** claimed
 
 - [ ] The contract test suite written against the protocol in slice 08 passes against the Daytona binding (provider-credentialed suite, excluded from default CI)
 - [ ] A real smoke run: snapshot build → sandbox → setup → agent serves → trivial prompt → events streamed → transcript exported to Foresight-owned storage → archived → revived → destroyed

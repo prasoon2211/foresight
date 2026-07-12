@@ -21,10 +21,14 @@
       "mergedAt": "2026-07-12T16:33:12.473Z"
     },
     "12": {
-      "status": "launched",
+      "status": "merged",
       "agentId": "bc-56c3b1c0-c12f-4ddd-b62f-4f12a169f248",
       "runId": "run-a8898e59-b271-42da-88ed-2f7d8aed5d74",
-      "launchedAt": "2026-07-12T16:33:35.185Z"
+      "launchedAt": "2026-07-12T16:33:35.185Z",
+      "prUrl": "https://github.com/prasoon2211/foresight/pull/8",
+      "branch": "cursor/harness-result-contract-f248",
+      "finishedAt": "2026-07-12T17:00:48.236Z",
+      "mergedAt": "2026-07-12T17:05:18.456Z"
     },
     "07": {
       "status": "merged",

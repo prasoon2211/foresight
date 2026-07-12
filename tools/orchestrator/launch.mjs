@@ -27,6 +27,16 @@ const prompt =
   buildWorkerPrompt(nn) +
   (extraNote ? `\n\n## Note from the orchestrator\n\n${extraNote}` : "");
 
+// Tickets that exercise real providers need credentials in the worker VM.
+// Values are encrypted at rest and deleted with the agent (SDK cloud.envVars).
+const envVars = {};
+if (["13", "14", "15", "16"].includes(nn)) {
+  for (const name of ["DAYTONA_API_KEY", "OPENAI_API_KEY"]) {
+    if (process.env[name]) envVars[name] = process.env[name];
+    else console.error(`warning: ${name} not set; worker will not receive it`);
+  }
+}
+
 let agent, run;
 try {
   agent = await Agent.create({
@@ -44,6 +54,7 @@ try {
       repos: [{ url: REPO_URL, startingRef: "main" }],
       autoCreatePR: true,
       skipReviewerRequest: true,
+      ...(Object.keys(envVars).length ? { envVars } : {}),
     },
   });
   console.log(`agentId: ${agent.agentId}`);
