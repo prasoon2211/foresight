@@ -1,11 +1,12 @@
 from typing import Protocol, cast
 
 import pytest
+from django.contrib.auth import get_user_model
 from django.test import Client
 from procrastinate.connector import BaseAsyncConnector
 from procrastinate.contrib.django import app
 
-from core.models import Org, Repo, ResultStatus, RunState
+from core.models import Org, OrgMembership, Repo, ResultStatus, RunState
 from executor import AgentResult, FakeExecutor
 from orchestration.executor_backend import use_executor
 from orchestration.run_orchestrator import orchestrate_run
@@ -17,8 +18,18 @@ class WorkerConnectorFactory(Protocol):
 
 @pytest.mark.django_db(transaction=True)
 def test_manual_signal_runs_to_awaiting_review_over_the_api(client: Client) -> None:
+    user = get_user_model().objects.create_user(
+        username="member",
+        email="member@example.com",
+    )
     org = Org.objects.create(name="Acme")
+    OrgMembership.objects.create(
+        org=org,
+        user=user,
+        role=OrgMembership.Role.MEMBER,
+    )
     repo = Repo.objects.create(org=org, full_name="acme/widgets")
+    client.force_login(user)
     fake = FakeExecutor.succeeding(
         AgentResult(
             status=ResultStatus.PR_OPENED,
@@ -30,7 +41,7 @@ def test_manual_signal_runs_to_awaiting_review_over_the_api(client: Client) -> N
 
     with use_executor(fake):
         create_response = client.post(
-            "/api/signals",
+            f"/api/orgs/{org.id}/signals",
             data={
                 "repo_id": repo.id,
                 "title": "Fix widget race",
@@ -43,7 +54,7 @@ def test_manual_signal_runs_to_awaiting_review_over_the_api(client: Client) -> N
         created = create_response.json()
         assert created["intake_state"] == "dispatched"
 
-        queued_response = client.get(f"/api/runs/{created['run_id']}")
+        queued_response = client.get(f"/api/orgs/{org.id}/runs/{created['run_id']}")
         assert queued_response.status_code == 200
         assert queued_response.json()["state"] == RunState.QUEUED
 
@@ -55,8 +66,8 @@ def test_manual_signal_runs_to_awaiting_review_over_the_api(client: Client) -> N
                 listen_notify=False,
             )
 
-        run_response = client.get(f"/api/runs/{created['run_id']}")
-        signals_response = client.get("/api/signals")
+        run_response = client.get(f"/api/orgs/{org.id}/runs/{created['run_id']}")
+        signals_response = client.get(f"/api/orgs/{org.id}/signals")
         orchestrate_run(created["run_id"], fake)
 
     assert run_response.status_code == 200
@@ -64,6 +75,8 @@ def test_manual_signal_runs_to_awaiting_review_over_the_api(client: Client) -> N
         "id": created["run_id"],
         "signal_id": created["id"],
         "state": RunState.AWAITING_REVIEW,
+        "failure_reason": "",
+        "failure_detail": "",
         "result": {
             "status": ResultStatus.PR_OPENED,
             "pr_url": "https://github.com/acme/widgets/pull/17",
@@ -83,7 +96,7 @@ def test_manual_signal_runs_to_awaiting_review_over_the_api(client: Client) -> N
             "outcome_status": RunState.AWAITING_REVIEW,
         }
     ]
-    assert fake.calls == [
+    assert [call for call in fake.calls if call != "list_sandboxes"] == [
         "create_sandbox",
         "launch_agent",
         "stream_events",
