@@ -4,6 +4,7 @@ from executor.fake import FakeExecutor, FakeExecutorScript
 from executor.protocol import (
     AgentEvent,
     AgentLaunch,
+    AgentMessage,
     AgentResult,
     AgentSession,
     AttachEndpoints,
@@ -17,11 +18,13 @@ from executor.protocol import (
     SandboxRecord,
     SandboxSpec,
     SetupFailed,
+    TranscriptUnavailable,
 )
 
 __all__ = [
     "AgentEvent",
     "AgentLaunch",
+    "AgentMessage",
     "AgentResult",
     "AgentSession",
     "AttachEndpoints",
@@ -37,4 +40,5 @@ __all__ = [
     "SandboxRecord",
     "SandboxSpec",
     "SetupFailed",
+    "TranscriptUnavailable",
 ]

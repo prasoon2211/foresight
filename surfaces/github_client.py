@@ -1,10 +1,10 @@
 import json
 import time
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar, Token
-from typing import Any, Protocol, cast
-from urllib.parse import quote
+from typing import Any, Protocol
+from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
 
 import jwt
@@ -36,15 +36,28 @@ class GitHubClient(Protocol):
         label: str,
     ) -> None: ...
 
+    def find_open_pull_request(
+        self,
+        installation_id: int,
+        repo_full_name: str,
+        branch_name: str,
+    ) -> str | None: ...
+
 
 class FakeGitHubClient:
     """In-memory GitHub boundary with externally inspectable calls."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        open_pull_requests: Mapping[tuple[str, str], str] | None = None,
+    ) -> None:
         self.calls: list[str] = []
         self.comments: list[tuple[str, int, str]] = []
         self.label_additions: list[tuple[str, int, tuple[str, ...]]] = []
         self.label_removals: list[tuple[str, int, str]] = []
+        self.pull_request_lookups: list[tuple[int, str, str]] = []
+        self.open_pull_requests = dict(open_pull_requests or {})
 
     def post_issue_comment(
         self,
@@ -76,6 +89,16 @@ class FakeGitHubClient:
     ) -> None:
         self.calls.append("remove_issue_label")
         self.label_removals.append((repo_full_name, issue_number, label))
+
+    def find_open_pull_request(
+        self,
+        installation_id: int,
+        repo_full_name: str,
+        branch_name: str,
+    ) -> str | None:
+        self.calls.append("find_open_pull_request")
+        self.pull_request_lookups.append((installation_id, repo_full_name, branch_name))
+        return self.open_pull_requests.get((repo_full_name, branch_name))
 
 
 class GitHubAppClient:
@@ -138,6 +161,30 @@ class GitHubAppClient:
             installation_id=installation_id,
         )
 
+    def find_open_pull_request(
+        self,
+        installation_id: int,
+        repo_full_name: str,
+        branch_name: str,
+    ) -> str | None:
+        owner = repo_full_name.split("/", 1)[0]
+        query = urlencode(
+            {
+                "state": "open",
+                "head": f"{owner}:{branch_name}",
+                "per_page": 1,
+            }
+        )
+        response = self._request_json(
+            "GET",
+            f"/repos/{quote(repo_full_name, safe='/')}/pulls?{query}",
+            installation_id=installation_id,
+        )
+        if not isinstance(response, list) or not response:
+            return None
+        pr_url = response[0].get("html_url")
+        return str(pr_url) if pr_url else None
+
     def _installation_token(self, installation_id: int) -> str:
         cached = self._tokens.get(installation_id)
         if cached is not None and cached[1] > time.time() + 60:
@@ -165,7 +212,7 @@ class GitHubAppClient:
         installation_id: int | None = None,
         authorization: str | None = None,
         payload: dict[str, object] | None = None,
-    ) -> dict[str, Any]:
+    ) -> Any:
         if authorization is None:
             if installation_id is None:
                 raise ValueError("an installation ID or authorization header is required")
@@ -186,7 +233,7 @@ class GitHubAppClient:
             body = response.read()
         if not body:
             return {}
-        return cast(dict[str, Any], json.loads(body))
+        return json.loads(body)
 
 
 _override: ContextVar[GitHubClient | None] = ContextVar("github_client", default=None)

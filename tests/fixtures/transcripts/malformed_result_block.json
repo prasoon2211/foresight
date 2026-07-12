@@ -1,0 +1,11 @@
+[
+  {
+    "info": {"role": "assistant"},
+    "parts": [
+      {
+        "type": "text",
+        "text": "Done.\n```foresight-result\n{\"status\":\"pr_opened\", this is not JSON}\n```"
+      }
+    ]
+  }
+]

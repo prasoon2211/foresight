@@ -13,6 +13,10 @@ class SandboxDied(Exception):
     pass
 
 
+class TranscriptUnavailable(Exception):
+    pass
+
+
 @dataclass(frozen=True)
 class EnvFile:
     target_path: str
@@ -67,6 +71,12 @@ class AgentSession:
 
 
 @dataclass(frozen=True)
+class AgentMessage:
+    role: str
+    text: str
+
+
+@dataclass(frozen=True)
 class AttachEndpoints:
     web_url: str
     api_url: str
@@ -77,7 +87,7 @@ class AttachEndpoints:
 @dataclass(frozen=True)
 class AgentResult:
     status: str
-    pr_url: str
+    pr_url: str | None
     summary: str
     confidence: float
 
@@ -86,7 +96,6 @@ class AgentResult:
 class AgentEvent:
     kind: str
     session_id: str | None = None
-    result: AgentResult | None = None
 
 
 class Executor(Protocol):
@@ -114,6 +123,14 @@ class Executor(Protocol):
         session: AgentSession,
     ) -> Iterator[AgentEvent]: ...
 
+    def get_session_messages(
+        self,
+        handle: SandboxHandle,
+        session: AgentSession,
+    ) -> list[AgentMessage]: ...
+
+    def read_file(self, handle: SandboxHandle, path: str) -> str | None: ...
+
     def destroy(self, handle: SandboxHandle) -> None: ...
 
 
@@ -122,4 +139,4 @@ class SandboxInventory(Protocol):
 
 
 class DurableExecutor(Executor, SandboxInventory, Protocol):
-    """Five-verb executor plus provider inventory for recovery and reconciliation."""
+    """Executor plus provider inventory for recovery and reconciliation."""

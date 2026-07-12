@@ -1,0 +1,30 @@
+[
+  {
+    "info": {"role": "assistant"},
+    "parts": [
+      {
+        "type": "text",
+        "text": "An earlier report.\n```foresight-result\n{\"status\":\"failed\",\"pr_url\":null,\"summary\":\"Not final.\",\"confidence\":0.1}\n```"
+      }
+    ]
+  },
+  {
+    "info": {"role": "user"},
+    "parts": [
+      {
+        "type": "text",
+        "text": "```foresight-result\n{\"status\":\"failed\",\"pr_url\":null,\"summary\":\"User content.\",\"confidence\":0}\n```"
+      }
+    ]
+  },
+  {
+    "info": {"role": "assistant"},
+    "parts": [
+      {"type": "text", "text": "Finished the work.\n"},
+      {
+        "type": "text",
+        "text": "```foresight-result\n{\"status\":\"blocked\",\"pr_url\":null,\"summary\":\"Superseded block.\",\"confidence\":0.3}\n```\n```foresight-result\n{\"status\":\"pr_opened\",\"pr_url\":\"https://github.com/acme/widgets/pull/17\",\"summary\":\"Fixed the widget race; full suite passes.\",\"confidence\":0.92}\n```"
+      }
+    ]
+  }
+]
