@@ -42,3 +42,10 @@ The five canonical triage labels are used as-is (`needs-triage`, `needs-info`, `
 ### Domain docs
 
 Single-context: one `CONTEXT.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+
+## Cursor Cloud specific instructions
+
+- This repo is currently **documentation/specs only** — there is no application code, tests, build, or lint tooling. It holds Markdown (domain glossary `CONTEXT.md`, agent skills under `.agents/skills/`, and the Foresight V1 spec/tickets under `.scratch/foresight-v1/`) plus `skills-lock.json`.
+- There are **no dependencies to install** and **no service to run** yet. The startup update script is intentionally a no-op; do not add install/build/run steps until real manifests exist.
+- `skills-lock.json` is an agent-skills lockfile (tracks Markdown skills vendored from `mattpocock/skills`), not a package-manager lockfile — don't feed it to npm/pip/etc.
+- Planned product (**Foresight**, an autonomous coding-agent control plane) is unbuilt: Django (ASGI) + django-ninja API, PostgreSQL, Procrastinate workers, React/Vite SPA, deployed via `docker compose`. The first implementation step is ticket `.scratch/foresight-v1/issues/07-backend-scaffold.md`, which will introduce the manifests, lint/test/build commands, and services. Once that lands, update the update script and this section accordingly.
