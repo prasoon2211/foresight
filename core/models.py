@@ -79,6 +79,14 @@ class Org(models.Model):
     )
     created_at = models.DateTimeField(auto_now_add=True)
 
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(concurrency_cap__gte=1),
+                name="org_concurrency_cap_at_least_one",
+            )
+        ]
+
     def __str__(self) -> str:
         return self.name
 
@@ -252,6 +260,7 @@ class Run(models.Model):
     confidence = models.FloatField(null=True, blank=True)
     pr_merged_at = models.DateTimeField(null=True, blank=True)
     failure_reason = models.CharField(max_length=40, choices=FailureReason, blank=True)
+    failure_detail = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

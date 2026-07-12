@@ -108,4 +108,6 @@ class RunOut(Schema):
     id: int
     signal_id: int
     state: str
+    failure_reason: str
+    failure_detail: str
     result: RunResultOut | None

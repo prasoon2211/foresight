@@ -8,7 +8,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("core", "0005_apitoken"),
+        ("core", "0006_run_failure_reason_and_org_cap_constraint"),
     ]
 
     operations = [

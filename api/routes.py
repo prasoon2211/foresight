@@ -31,7 +31,7 @@ from api.schemas import (
     SignalOut,
 )
 from core.api_tokens import mint_api_token, revoke_api_token
-from core.intake import create_manual_signal
+from core.intake import create_manual_signal, rerun_signal
 from core.models import ApiToken, Org, OrgMembership, Repo, Run, Signal
 from core.organizations import (
     AlreadyOrgMember,
@@ -41,9 +41,32 @@ from core.organizations import (
     update_org_settings,
 )
 from core.outcome import RunOutcome, derive_outcome_status, derive_stranded
+from core.run_control import stop_run
+from orchestration.executor_backend import get_executor
 from orchestration.tasks import enqueue_run_orchestrator
 
 router = Router(tags=["orgs", "signals", "runs"])
+
+
+def _run_out(run: Run) -> RunOut:
+    result = None
+    if run.result_status:
+        if run.confidence is None:
+            raise RuntimeError("completed run result is missing confidence")
+        result = RunResultOut(
+            status=run.result_status,
+            pr_url=run.pr_url,
+            summary=run.summary,
+            confidence=run.confidence,
+        )
+    return RunOut(
+        id=run.pk,
+        signal_id=run.signal_id,
+        state=run.state,
+        failure_reason=run.failure_reason,
+        failure_detail=run.failure_detail,
+        result=result,
+    )
 
 
 def get_org_access(request: AuthenticatedRequest, org_id: int) -> OrgAccess:
@@ -378,19 +401,35 @@ def get_run(
 ) -> RunOut:
     get_org_access(request, org_id)
     run = get_object_or_404(Run, pk=run_id, signal__org_id=org_id)
-    result = None
-    if run.result_status:
-        if run.confidence is None:
-            raise RuntimeError("completed run result is missing confidence")
-        result = RunResultOut(
-            status=run.result_status,
-            pr_url=run.pr_url,
-            summary=run.summary,
-            confidence=run.confidence,
-        )
-    return RunOut(
-        id=run.pk,
-        signal_id=run.signal_id,
-        state=run.state,
-        result=result,
-    )
+    return _run_out(run)
+
+
+@router.post(
+    "/orgs/{org_id}/runs/{run_id}/stop",
+    auth=org_auth,
+    response={200: RunOut, API_ERROR_STATUSES: ApiErrorOut},
+)
+def stop_running_run(
+    request: AuthenticatedRequest,
+    org_id: int,
+    run_id: int,
+) -> RunOut:
+    get_org_access(request, org_id)
+    run = get_object_or_404(Run, pk=run_id, signal__org_id=org_id)
+    return _run_out(stop_run(run=run, executor=get_executor()))
+
+
+@router.post(
+    "/orgs/{org_id}/signals/{signal_id}/rerun",
+    auth=org_auth,
+    response={201: RunOut, API_ERROR_STATUSES: ApiErrorOut},
+)
+def rerun(
+    request: AuthenticatedRequest,
+    org_id: int,
+    signal_id: int,
+) -> Status[RunOut]:
+    get_org_access(request, org_id)
+    signal = get_object_or_404(Signal, pk=signal_id, org_id=org_id)
+    run = rerun_signal(signal=signal, enqueue_run=enqueue_run_orchestrator)
+    return Status(201, _run_out(run))

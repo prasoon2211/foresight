@@ -3,6 +3,16 @@ from dataclasses import dataclass
 from typing import Protocol
 
 
+class SetupFailed(Exception):
+    def __init__(self, detail: str) -> None:
+        super().__init__(detail)
+        self.detail = detail
+
+
+class SandboxDied(Exception):
+    pass
+
+
 @dataclass(frozen=True)
 class EnvFile:
     target_path: str
@@ -28,6 +38,17 @@ class SandboxSpec:
 @dataclass(frozen=True)
 class SandboxHandle:
     sandbox_id: str
+
+
+@dataclass(frozen=True)
+class SandboxRecord:
+    handle: SandboxHandle
+    labels: dict[str, str]
+
+    @property
+    def run_id(self) -> int | None:
+        value = self.labels.get("run_id", "")
+        return int(value) if value.isdigit() else None
 
 
 @dataclass(frozen=True)
@@ -69,13 +90,17 @@ class AgentEvent:
 
 
 class Executor(Protocol):
-    def create_sandbox(self, spec: SandboxSpec) -> SandboxHandle: ...
+    def create_sandbox(self, spec: SandboxSpec) -> SandboxHandle:
+        """Create a sandbox carrying the supplied provider labels."""
+        ...
 
     def launch_agent(
         self,
         handle: SandboxHandle,
         launch: AgentLaunch,
-    ) -> AgentSession: ...
+    ) -> AgentSession:
+        """Launch once per sandbox; repeated calls return the existing session."""
+        ...
 
     def get_attach_endpoints(
         self,
@@ -90,3 +115,11 @@ class Executor(Protocol):
     ) -> Iterator[AgentEvent]: ...
 
     def destroy(self, handle: SandboxHandle) -> None: ...
+
+
+class SandboxInventory(Protocol):
+    def list_sandboxes(self) -> list[SandboxRecord]: ...
+
+
+class DurableExecutor(Executor, SandboxInventory, Protocol):
+    """Five-verb executor plus provider inventory for recovery and reconciliation."""

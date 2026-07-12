@@ -30,8 +30,9 @@ def test_member_gets_not_found_for_other_org_signals_and_runs(client: Client) ->
 
     signal_response = client.get(f"/api/orgs/{org_b.id}/signals/{signal_b.id}")
     run_response = client.get(f"/api/orgs/{org_b.id}/runs/{run_b.id}")
+    stop_response = client.post(f"/api/orgs/{org_b.id}/runs/{run_b.id}/stop")
+    rerun_response = client.post(f"/api/orgs/{org_b.id}/signals/{signal_b.id}/rerun")
 
-    assert signal_response.status_code == 404
-    assert run_response.status_code == 404
-    assert signal_response.json()["code"] == "not_found"
-    assert run_response.json()["code"] == "not_found"
+    for response in [signal_response, run_response, stop_response, rerun_response]:
+        assert response.status_code == 404
+        assert response.json()["code"] == "not_found"
