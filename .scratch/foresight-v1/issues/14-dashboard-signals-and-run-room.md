@@ -6,10 +6,14 @@ The API additions this behavior needs land here with it, honoring API-first: att
 
 **Blocked by:** 09 — Auth (login, org context); 10 — Run control (stop, re-run); 11 — GitHub surface (real signals to show); 13 — Daytona (real attach endpoints to mint).
 
-**Status:** claimed
+**Status:** resolved
 
-- [ ] API tests for every new capability: attach-URL minting calls the executor and never caches, websocket-proxy auth enforced, live state reflects Run-row changes, transcript retrieval, revive-when-available
-- [ ] Playthrough against a locally running backend: a labeled-issue signal appears in the list, its run watched live, terminal attached, a run stopped, a signal re-run, result card and transcript render
-- [ ] Stranded signals visibly flagged in the list; failure reasons and detail readable in the run room
+- [x] API tests for every new capability: attach-URL minting calls the executor and never caches, websocket-proxy auth enforced, live state reflects Run-row changes, transcript retrieval, revive-when-available
+- [x] Playthrough against a locally running backend: a labeled-issue signal appears in the list, its run watched live, terminal attached, a run stopped, a signal re-run, result card and transcript render
+- [x] Stranded signals visibly flagged in the list; failure reasons and detail readable in the run room
 
 Spec sections: Dashboard information architecture, API-first; user stories 13, 16–30.
+
+## Comments
+
+- 2026-07-12: Built and validated the signals dashboard, run room, attach proxy, transcript, and revival APIs in [PR #10](https://github.com/prasoon2211/foresight/pull/10).

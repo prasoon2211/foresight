@@ -12,7 +12,7 @@ from api.auth import (
     session_auth,
 )
 from api.errors import API_ERROR_STATUSES, ApiError, ApiErrorOut
-from api.run_room import is_revivable, mint_attach_endpoints, revive_run_sandbox
+from api.run_room import is_attachable, is_revivable, mint_attach_endpoints, revive_run_sandbox
 from api.schemas import (
     ApiTokenCreatedOut,
     ApiTokenCreateIn,
@@ -563,7 +563,7 @@ def attach_to_run(
 ) -> AttachEndpointsOut:
     get_org_access(request, org_id)
     run = get_object_or_404(Run, pk=run_id, signal__org_id=org_id)
-    if not run.sandbox_id or not run.agent_session_id or run.sandbox_archived_at is not None:
+    if not is_attachable(run):
         raise ApiError(
             status_code=409,
             code="run_not_attachable",
@@ -574,6 +574,9 @@ def attach_to_run(
     return AttachEndpointsOut(
         web_url=endpoints.web_url,
         api_url=endpoints.api_url,
+        web_username=endpoints.web_username,
+        web_password=endpoints.web_password,
+        expires_at=endpoints.expires_at,
         terminal_websocket_url=endpoints.terminal_websocket_url,
         tui_command=endpoints.tui_command,
     )

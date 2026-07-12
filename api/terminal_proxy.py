@@ -23,7 +23,7 @@ from django.contrib.sessions.backends.base import SessionBase
 from django.db import close_old_connections
 from websockets.asyncio.client import connect
 
-from api.run_room import terminal_ticket_is_valid
+from api.run_room import is_attachable, terminal_ticket_is_valid
 from core.api_tokens import authenticate_api_token
 from core.models import ApiToken, OrgMembership, Run
 from executor import AgentSession, SandboxHandle
@@ -80,7 +80,7 @@ class ForesightAsgiApplication:
         if run is None:
             await _close(send, 4404)
             return
-        if not run.sandbox_id or not run.agent_session_id or run.sandbox_archived_at is not None:
+        if not is_attachable(run):
             await _close(send, 4409)
             return
         terminal_url = await sync_to_async(_provider_terminal_url)(run)

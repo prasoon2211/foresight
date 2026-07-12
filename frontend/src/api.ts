@@ -172,7 +172,11 @@ async function csrfToken() {
   return token;
 }
 
-async function authRequest(pathname: string, body: object): Promise<AuthResponse> {
+async function authRequest(
+  pathname: string,
+  body: object,
+  acceptedStatuses = [200],
+): Promise<AuthResponse> {
   const csrf = await csrfToken();
   const response = await fetch(pathname, {
     method: "POST",
@@ -184,7 +188,7 @@ async function authRequest(pathname: string, body: object): Promise<AuthResponse
     body: JSON.stringify(body),
   });
   const payload = (await response.json()) as AuthResponse;
-  if (!response.ok) {
+  if (!acceptedStatuses.includes(response.status)) {
     throw new Error(payload.hint || payload.message || "Authentication failed.");
   }
   return payload;
@@ -194,9 +198,9 @@ export const auth = {
   login: (email: string, password: string) =>
     authRequest("/_allauth/browser/v1/auth/login", { email, password }),
   signup: (email: string, password: string) =>
-    authRequest("/_allauth/browser/v1/auth/signup", { email, password }),
+    authRequest("/_allauth/browser/v1/auth/signup", { email, password }, [200, 401]),
   verifyEmail: (key: string) =>
-    authRequest("/_allauth/browser/v1/auth/email/verify", { key }),
+    authRequest("/_allauth/browser/v1/auth/email/verify", { key }, [200, 401]),
 };
 
 export type {

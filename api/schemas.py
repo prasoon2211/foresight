@@ -137,6 +137,9 @@ class RunOut(Schema):
 class AttachEndpointsOut(Schema):
     web_url: str
     api_url: str
+    web_username: str
+    web_password: str
+    expires_at: datetime
     terminal_websocket_url: str
     tui_command: str
 

@@ -463,6 +463,18 @@ export type AttachEndpointsOut = {
      */
     api_url: string;
     /**
+     * Web Username
+     */
+    web_username: string;
+    /**
+     * Web Password
+     */
+    web_password: string;
+    /**
+     * Expires At
+     */
+    expires_at: string;
+    /**
      * Terminal Websocket Url
      */
     terminal_websocket_url: string;

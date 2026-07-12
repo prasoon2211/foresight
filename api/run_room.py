@@ -1,6 +1,6 @@
 import secrets
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta
 from urllib.parse import quote
 
 from django.conf import settings
@@ -12,14 +12,22 @@ from executor import AgentSession, AttachEndpoints, DurableExecutor, SandboxHand
 
 TERMINAL_TICKET_SALT = "foresight.run-terminal"
 TERMINAL_TICKET_MAX_AGE_SECONDS = 300
+ATTACH_ENDPOINT_TTL_SECONDS = 3600
 
 
 @dataclass(frozen=True)
 class BrowserAttachEndpoints:
     web_url: str
     api_url: str
+    web_username: str
+    web_password: str
+    expires_at: datetime
     terminal_websocket_url: str
     tui_command: str
+
+
+def is_attachable(run: Run) -> bool:
+    return bool(run.sandbox_id and run.agent_session_id and run.sandbox_archived_at is None)
 
 
 def is_revivable(run: Run) -> bool:
@@ -93,6 +101,9 @@ def _browser_endpoints(
     return BrowserAttachEndpoints(
         web_url=endpoints.web_url,
         api_url=endpoints.api_url,
+        web_username="opencode",
+        web_password=run.server_password,
+        expires_at=timezone.now() + timedelta(seconds=ATTACH_ENDPOINT_TTL_SECONDS),
         terminal_websocket_url=f"{websocket_base}{terminal_path}?ticket={quote(ticket)}",
         tui_command=endpoints.tui_command,
     )

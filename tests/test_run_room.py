@@ -87,6 +87,9 @@ def test_attach_endpoints_are_minted_fresh_and_provider_terminal_stays_server_si
     assert second.status_code == 200
     assert first.json()["web_url"] == "https://fake.test/sandbox-14/web"
     assert first.json()["api_url"] == "https://fake.test/sandbox-14/api"
+    assert first.json()["web_username"] == "opencode"
+    assert first.json()["web_password"] == "secret"
+    assert first.json()["expires_at"]
     assert first.json()["tui_command"] == ("opencode attach fake://sandbox-14 --session session-14")
     assert first.json()["terminal_websocket_url"].startswith(
         f"ws://localhost:8000/api/orgs/{org.pk}/runs/{run.pk}/terminal?ticket="

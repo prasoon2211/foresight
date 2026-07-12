@@ -94,9 +94,10 @@ pre { white-space: pre-wrap; word-break: break-word; font-family: "SFMono-Regula
 .empty { padding: 50px; color: #647485; text-align: center; }
 .prose { margin-bottom: 30px; line-height: 1.7; }
 .run-history { overflow: hidden; border: 1px solid #222d38; border-radius: 9px; }
-.run-row { display: grid; grid-template-columns: 100px 150px 1fr auto; align-items: center; gap: 16px; border-bottom: 1px solid #222d38; padding: 14px 17px; color: #b8c3ce; font-size: 13px; }
+.run-row { display: grid; grid-template-columns: 90px 140px minmax(180px, 1fr) 170px auto; align-items: center; gap: 16px; border-bottom: 1px solid #222d38; padding: 14px 17px; color: #b8c3ce; font-size: 13px; }
 .run-row:last-child { border: 0; }
 .run-row time { color: #657587; }
+.run-summary { overflow: hidden; color: #8f9dab; text-overflow: ellipsis; white-space: nowrap; }
 
 .timeline { display: grid; grid-template-columns: repeat(5, 1fr); margin: 0 0 28px; padding: 0; list-style: none; }
 .timeline li { position: relative; display: flex; align-items: center; gap: 8px; color: #4f5c69; font-size: 11px; text-transform: capitalize; }
@@ -113,6 +114,9 @@ pre { white-space: pre-wrap; word-break: break-word; font-family: "SFMono-Regula
 .run-grid aside { display: grid; align-content: start; gap: 18px; }
 .panel-title { display: flex; align-items: flex-start; justify-content: space-between; gap: 15px; }
 .session-panel iframe, .session-placeholder { width: 100%; height: 500px; border: 1px solid #202b35; border-radius: 6px; background: #080b0f; }
+.session-credential { display: flex; align-items: center; gap: 9px; margin-bottom: 10px; color: #7f8c9b; font-size: 12px; }
+.session-credential code { color: #b7c8d6; }
+.session-credential button { margin-left: auto; padding: 5px 9px; }
 .session-placeholder { display: grid; place-items: center; padding: 30px; color: #596978; text-align: center; }
 .action-stack { display: grid; gap: 9px; }
 .danger-button { border-color: #6d353a; color: #ff9fa5; }

@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FormEvent, lazy, Suspense, useCallback, useState } from "react";
+import { FormEvent, lazy, Suspense, useCallback, useEffect, useState } from "react";
 import {
   Link,
   Navigate,
@@ -290,6 +290,12 @@ function SignalDetail() {
           <Link key={run.id} to={`/orgs/${orgId}/runs/${run.id}`} className="run-row">
             <span>Attempt {index + 1}</span>
             <StatusBadge status={run.state} />
+            <span className="run-summary">
+              {run.result?.summary ||
+                (run.failure_reason
+                  ? `${run.failure_reason.replaceAll("_", " ")}${run.failure_detail ? ` — ${run.failure_detail}` : ""}`
+                  : "No result yet")}
+            </span>
             <time>{new Date(run.created_at).toLocaleString()}</time>
             <span>Open run room →</span>
           </Link>
@@ -338,7 +344,19 @@ function RunRoom() {
     queryFn: () => api.transcript(orgId, runId),
     enabled: showTranscript,
   });
-  const disconnected = useCallback(() => setTerminalUrl(""), []);
+  useEffect(() => {
+    if (!attach) return;
+    const refreshIn = Math.max(Date.parse(attach.expires_at) - Date.now() - 30_000, 1_000);
+    const timer = window.setTimeout(() => attachMutation.mutate(), refreshIn);
+    return () => window.clearTimeout(timer);
+  }, [attach?.expires_at]);
+  const closeTerminal = useCallback(() => setTerminalUrl(""), []);
+  const reconnectTerminal = useCallback(() => {
+    setTerminalUrl("");
+    window.setTimeout(() => {
+      api.attach(orgId, runId).then((fresh) => setTerminalUrl(fresh.terminal_websocket_url));
+    }, 1_000);
+  }, [orgId, runId]);
 
   if (!run.data) return <p className="muted">Loading run room…</p>;
   const current = run.data;
@@ -370,7 +388,15 @@ function RunRoom() {
             )}
           </div>
           {attach ? (
-            <iframe title="Live OpenCode session" src={attach.web_url} />
+            <>
+              <div className="session-credential">
+                OpenCode login: <code>{attach.web_username}</code>
+                <button onClick={() => navigator.clipboard.writeText(attach.web_password)}>
+                  Copy password
+                </button>
+              </div>
+              <iframe title="Live OpenCode session" src={attach.web_url} />
+            </>
           ) : (
             <div className="session-placeholder">
               {current.sandbox_archived_at
@@ -404,9 +430,9 @@ function RunRoom() {
       </div>
       {terminalUrl && (
         <section className="panel terminal-panel">
-          <div className="panel-title"><h2>Sandbox terminal</h2><button onClick={disconnected}>Close</button></div>
+          <div className="panel-title"><h2>Sandbox terminal</h2><button onClick={closeTerminal}>Close</button></div>
           <Suspense fallback={<p className="muted">Loading terminal…</p>}>
-            <Terminal websocketUrl={terminalUrl} onDisconnect={disconnected} />
+            <Terminal websocketUrl={terminalUrl} onDisconnect={reconnectTerminal} />
           </Suspense>
         </section>
       )}
@@ -438,7 +464,7 @@ function StateTimeline({ run }: { run: RunOut }) {
           key={state}
           className={
             run.state === "failed"
-              ? index < 3 ? "complete" : ""
+              ? ""
               : index < currentIndex ? "complete" : index === currentIndex ? "current" : ""
           }
         >

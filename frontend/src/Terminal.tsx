@@ -1,3 +1,4 @@
+import { FitAddon } from "@xterm/addon-fit";
 import { Terminal as XTerm } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import { useEffect, useRef } from "react";
@@ -19,9 +20,13 @@ export function Terminal({ websocketUrl, onDisconnect }: Props) {
       fontSize: 13,
       theme: { background: "#080b10", foreground: "#d4d9e2" },
     });
+    const fit = new FitAddon();
+    terminal.loadAddon(fit);
     const socket = new WebSocket(websocketUrl);
+    let disposed = false;
     socket.binaryType = "arraybuffer";
     terminal.open(container.current);
+    fit.fit();
     terminal.writeln("Connecting to sandbox…");
 
     const input = terminal.onData((data) => {
@@ -38,10 +43,14 @@ export function Terminal({ websocketUrl, onDisconnect }: Props) {
     socket.onerror = () => terminal.writeln("\r\nTerminal connection failed.");
     socket.onclose = () => {
       terminal.writeln("\r\nDisconnected. Request a fresh terminal ticket to reconnect.");
-      onDisconnect();
+      if (!disposed) onDisconnect();
     };
+    const resize = () => fit.fit();
+    window.addEventListener("resize", resize);
 
     return () => {
+      disposed = true;
+      window.removeEventListener("resize", resize);
       input.dispose();
       socket.close();
       terminal.dispose();
