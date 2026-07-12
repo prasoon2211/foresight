@@ -1,5 +1,11 @@
 {
   "tickets": {
+    "10": {
+      "status": "launched",
+      "agentId": "bc-12f73c48-0efd-48a1-bbcc-a8809ab882ac",
+      "runId": "run-2d5d7259-2d4e-46b5-af04-aeb30f583852",
+      "launchedAt": "2026-07-12T15:20:14.609Z"
+    },
     "07": {
       "status": "merged",
       "agentId": "bc-3e1c5584-9484-4b64-a507-df728ad337de",
