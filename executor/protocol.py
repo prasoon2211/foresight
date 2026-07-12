@@ -85,13 +85,17 @@ class AgentEvent:
 
 
 class Executor(Protocol):
-    def create_sandbox(self, spec: SandboxSpec) -> SandboxHandle: ...
+    def create_sandbox(self, spec: SandboxSpec) -> SandboxHandle:
+        """Create a labeled sandbox recoverable through list_sandboxes."""
+        ...
 
     def launch_agent(
         self,
         handle: SandboxHandle,
         launch: AgentLaunch,
-    ) -> AgentSession: ...
+    ) -> AgentSession:
+        """Launch once per sandbox; repeated calls return the existing session."""
+        ...
 
     def get_attach_endpoints(
         self,

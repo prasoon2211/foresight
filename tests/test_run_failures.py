@@ -143,3 +143,31 @@ def test_idle_session_without_result_records_reason_and_tears_down() -> None:
     assert run.state == RunState.FAILED
     assert run.failure_reason == FailureReason.NO_RESULT
     assert fake.calls == ["create_sandbox", "launch_agent", "stream_events", "destroy"]
+
+
+@pytest.mark.django_db
+def test_success_result_without_pr_url_records_no_result() -> None:
+    org = Org.objects.create(name="Acme")
+    repo = Repo.objects.create(org=org, full_name="acme/widgets")
+    _, run = create_manual_signal(
+        repo=repo,
+        title="Fix widgets",
+        body="A success must identify its pull request.",
+        enqueue_run=lambda run_id: run_id,
+    )
+    fake = FakeExecutor.succeeding(
+        AgentResult(
+            status=ResultStatus.PR_OPENED,
+            pr_url="",
+            summary="Claimed success without a pull request.",
+            confidence=0.8,
+        )
+    )
+
+    orchestrate_run(run.pk, fake)
+
+    run.refresh_from_db()
+    assert run.state == RunState.FAILED
+    assert run.failure_reason == FailureReason.NO_RESULT
+    assert run.result_status == ""
+    assert fake.calls == ["create_sandbox", "launch_agent", "stream_events", "destroy"]

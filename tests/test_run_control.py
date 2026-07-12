@@ -44,6 +44,59 @@ def test_stop_running_run_via_api_cancels_and_tears_down(client: Client) -> None
     assert fake.calls == ["create_sandbox", "launch_agent", "stream_events", "destroy"]
 
 
+@pytest.mark.django_db
+def test_stop_during_sandbox_creation_destroys_newly_created_sandbox(
+    client: Client,
+) -> None:
+    org = Org.objects.create(name="Acme")
+    repo = Repo.objects.create(org=org, full_name="acme/widgets")
+    _, run = create_manual_signal(
+        repo=repo,
+        title="Fix widgets",
+        body="Cancel while provisioning.",
+        enqueue_run=lambda run_id: run_id,
+    )
+
+    def stop_after_creation() -> None:
+        response = client.post(f"/api/runs/{run.pk}/stop")
+        assert response.status_code == 200
+
+    fake = FakeExecutor(after_create=stop_after_creation)
+    with use_executor(fake):
+        orchestrate_run(run.pk, fake)
+
+    run.refresh_from_db()
+    assert run.state == RunState.FAILED
+    assert run.failure_reason == FailureReason.CANCELED
+    assert fake.calls == ["create_sandbox", "destroy"]
+    assert fake.list_sandboxes() == []
+
+
+@pytest.mark.django_db
+def test_stop_during_agent_launch_stays_canceled(client: Client) -> None:
+    org = Org.objects.create(name="Acme")
+    repo = Repo.objects.create(org=org, full_name="acme/widgets")
+    _, run = create_manual_signal(
+        repo=repo,
+        title="Fix widgets",
+        body="Cancel while the agent launches.",
+        enqueue_run=lambda run_id: run_id,
+    )
+
+    def stop_after_launch() -> None:
+        response = client.post(f"/api/runs/{run.pk}/stop")
+        assert response.status_code == 200
+
+    fake = FakeExecutor(after_launch=stop_after_launch)
+    with use_executor(fake):
+        orchestrate_run(run.pk, fake)
+
+    run.refresh_from_db()
+    assert run.state == RunState.FAILED
+    assert run.failure_reason == FailureReason.CANCELED
+    assert fake.calls == ["create_sandbox", "launch_agent", "destroy"]
+
+
 @pytest.mark.django_db(transaction=True)
 def test_rerun_via_api_creates_fresh_run_and_sandbox(client: Client) -> None:
     org = Org.objects.create(name="Acme")

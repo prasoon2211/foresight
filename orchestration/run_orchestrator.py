@@ -3,9 +3,9 @@ from enum import StrEnum
 from django.db import transaction
 
 from core.models import FailureReason, Org, ResultStatus, Run, RunState
+from core.run_control import fail_run
 from executor import (
     AgentLaunch,
-    AgentResult,
     AgentSession,
     Executor,
     SandboxDied,
@@ -15,47 +15,33 @@ from executor import (
 )
 
 
-class OrchestrationOutcome(StrEnum):
-    COMPLETED = "completed"
+class RunJobOutcome(StrEnum):
+    FINISHED = "finished"
     POSTPONED = "postponed"
 
 
-def _fail_run(
-    run: Run,
-    executor: Executor,
-    reason: FailureReason,
-    *,
-    detail: str = "",
-) -> None:
-    run.state = RunState.FAILED
-    run.failure_reason = reason
-    run.failure_detail = detail
-    run.save(update_fields=["state", "failure_reason", "failure_detail", "updated_at"])
-    if run.sandbox_id:
-        executor.destroy(SandboxHandle(sandbox_id=run.sandbox_id))
-
-
-def _record_result(run: Run, result: AgentResult) -> None:
-    run.result_status = result.status
-    run.pr_url = result.pr_url
-    run.summary = result.summary
-    run.confidence = result.confidence
-    run.save(
-        update_fields=[
-            "result_status",
-            "pr_url",
-            "summary",
-            "confidence",
-            "updated_at",
-        ]
-    )
-
-
-def orchestrate_run(run_id: int, executor: Executor) -> OrchestrationOutcome:
+def orchestrate_run(run_id: int, executor: Executor) -> RunJobOutcome:
     """Advance one run, checkpointing each learned fact before continuing."""
     run = Run.objects.select_related("signal__repo", "signal__org").get(pk=run_id)
     if run.state in {RunState.AWAITING_REVIEW, RunState.DONE, RunState.FAILED}:
-        return OrchestrationOutcome.COMPLETED
+        return RunJobOutcome.FINISHED
+
+    if not run.sandbox_id and run.state == RunState.PROVISIONING:
+        matching_sandboxes = [
+            sandbox
+            for sandbox in executor.list_sandboxes()
+            if sandbox.labels.get("run_id") == str(run.pk)
+        ]
+        if matching_sandboxes:
+            run.refresh_from_db(fields=["state"])
+            if run.state == RunState.FAILED:
+                for sandbox in matching_sandboxes:
+                    executor.destroy(sandbox.handle)
+                return RunJobOutcome.FINISHED
+            run.sandbox_id = matching_sandboxes[0].handle.sandbox_id
+            run.save(update_fields=["sandbox_id", "updated_at"])
+            for duplicate in matching_sandboxes[1:]:
+                executor.destroy(duplicate.handle)
 
     if not run.sandbox_id:
         if run.state == RunState.QUEUED:
@@ -71,7 +57,7 @@ def orchestrate_run(run_id: int, executor: Executor) -> OrchestrationOutcome:
                     state__in=[RunState.PROVISIONING, RunState.RUNNING],
                 ).exclude(pk=run.pk)
                 if occupied_slots.count() >= org.concurrency_cap:
-                    return OrchestrationOutcome.POSTPONED
+                    return RunJobOutcome.POSTPONED
                 run.state = RunState.PROVISIONING
                 run.save(update_fields=["state", "updated_at"])
         try:
@@ -89,17 +75,23 @@ def orchestrate_run(run_id: int, executor: Executor) -> OrchestrationOutcome:
                 )
             )
         except SetupFailed as error:
-            _fail_run(
-                run,
-                executor,
-                FailureReason.SETUP_FAILED,
+            fail_run(
+                run=run,
+                executor=executor,
+                reason=FailureReason.SETUP_FAILED,
                 detail=error.detail,
             )
-            return OrchestrationOutcome.COMPLETED
+            return RunJobOutcome.FINISHED
+        run.refresh_from_db(fields=["state"])
+        if run.state == RunState.FAILED:
+            executor.destroy(handle)
+            return RunJobOutcome.FINISHED
         run.sandbox_id = handle.sandbox_id
         run.save(update_fields=["sandbox_id", "updated_at"])
 
     run.refresh_from_db()
+    if run.state == RunState.FAILED:
+        return RunJobOutcome.FINISHED
     handle = SandboxHandle(sandbox_id=run.sandbox_id)
     if not run.agent_session_id:
         session = executor.launch_agent(
@@ -115,6 +107,9 @@ def orchestrate_run(run_id: int, executor: Executor) -> OrchestrationOutcome:
                 },
             ),
         )
+        run.refresh_from_db(fields=["state"])
+        if run.state == RunState.FAILED:
+            return RunJobOutcome.FINISHED
         run.agent_session_id = session.session_id
         run.agent_base_url = session.base_url
         run.state = RunState.RUNNING
@@ -131,36 +126,69 @@ def orchestrate_run(run_id: int, executor: Executor) -> OrchestrationOutcome:
             for event in executor.stream_events(handle, session):
                 run.refresh_from_db(fields=["state"])
                 if run.state == RunState.FAILED:
-                    return OrchestrationOutcome.COMPLETED
+                    return RunJobOutcome.FINISHED
                 if event.session_id != session.session_id:
                     continue
                 if event.kind == "session.error":
-                    _fail_run(run, executor, FailureReason.AGENT_ERROR)
-                    return OrchestrationOutcome.COMPLETED
+                    fail_run(
+                        run=run,
+                        executor=executor,
+                        reason=FailureReason.AGENT_ERROR,
+                    )
+                    return RunJobOutcome.FINISHED
                 if event.kind == "session.idle":
                     result = event.result
                     break
         except SandboxDied:
-            _fail_run(run, executor, FailureReason.SANDBOX_DIED)
-            return OrchestrationOutcome.COMPLETED
+            fail_run(
+                run=run,
+                executor=executor,
+                reason=FailureReason.SANDBOX_DIED,
+            )
+            return RunJobOutcome.FINISHED
         if result is None:
-            _fail_run(run, executor, FailureReason.NO_RESULT)
-            return OrchestrationOutcome.COMPLETED
-        _record_result(run, result)
-        if result.status == ResultStatus.FAILED:
-            _fail_run(run, executor, FailureReason.AGENT_REPORTED_FAILED)
-            return OrchestrationOutcome.COMPLETED
-        if result.status == ResultStatus.BLOCKED:
-            _fail_run(run, executor, FailureReason.AGENT_REPORTED_BLOCKED)
-            return OrchestrationOutcome.COMPLETED
-        if result.status != ResultStatus.PR_OPENED:
-            raise RuntimeError(f"orchestrator cannot handle result {result.status!r}")
+            fail_run(run=run, executor=executor, reason=FailureReason.NO_RESULT)
+            return RunJobOutcome.FINISHED
+        if result.status not in ResultStatus.values or (
+            result.status == ResultStatus.PR_OPENED and not result.pr_url
+        ):
+            fail_run(run=run, executor=executor, reason=FailureReason.NO_RESULT)
+            return RunJobOutcome.FINISHED
 
-        run.state = RunState.AWAITING_REVIEW
+        run.result_status = result.status
+        run.pr_url = result.pr_url
+        run.summary = result.summary
+        run.confidence = result.confidence
         run.save(
             update_fields=[
-                "state",
+                "result_status",
+                "pr_url",
+                "summary",
+                "confidence",
                 "updated_at",
             ]
         )
-    return OrchestrationOutcome.COMPLETED
+
+    run.refresh_from_db()
+    if run.result_status == ResultStatus.FAILED:
+        fail_run(
+            run=run,
+            executor=executor,
+            reason=FailureReason.AGENT_REPORTED_FAILED,
+        )
+        return RunJobOutcome.FINISHED
+    if run.result_status == ResultStatus.BLOCKED:
+        fail_run(
+            run=run,
+            executor=executor,
+            reason=FailureReason.AGENT_REPORTED_BLOCKED,
+        )
+        return RunJobOutcome.FINISHED
+
+    with transaction.atomic():
+        current_run = Run.objects.select_for_update().get(pk=run.pk)
+        if current_run.state == RunState.FAILED:
+            return RunJobOutcome.FINISHED
+        current_run.state = RunState.AWAITING_REVIEW
+        current_run.save(update_fields=["state", "updated_at"])
+    return RunJobOutcome.FINISHED

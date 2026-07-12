@@ -34,8 +34,12 @@ class FakeExecutor:
         sandbox_dies: bool = False,
         interrupt_before_launch_once: bool = False,
         interrupt_before_stream_once: bool = False,
+        interrupt_after_create_once: bool = False,
+        interrupt_after_launch_once: bool = False,
         inventory: Iterable[SandboxRecord] = (),
         before_stream: Callable[[], None] | None = None,
+        after_create: Callable[[], None] | None = None,
+        after_launch: Callable[[], None] | None = None,
     ) -> None:
         self._scripts = deque([list(script) for script in scripts] if scripts else [])
         self._use_default_script = scripts is None
@@ -43,11 +47,16 @@ class FakeExecutor:
         self._sandbox_dies = sandbox_dies
         self._interrupt_before_launch_once = interrupt_before_launch_once
         self._interrupt_before_stream_once = interrupt_before_stream_once
+        self._interrupt_after_create_once = interrupt_after_create_once
+        self._interrupt_after_launch_once = interrupt_after_launch_once
         self._before_stream = before_stream
+        self._after_create = after_create
+        self._after_launch = after_launch
         self._next_sandbox = 1
         self._next_session = 1
         self._destroyed: set[str] = set()
         self._inventory = {item.handle.sandbox_id: item for item in inventory}
+        self._sessions: dict[str, AgentSession] = {}
         self.calls: list[str] = []
         self.sandbox_specs: list[SandboxSpec] = []
         self.agent_launches: list[AgentLaunch] = []
@@ -68,6 +77,11 @@ class FakeExecutor:
             handle=handle,
             labels=dict(spec.labels),
         )
+        if self._after_create is not None:
+            self._after_create()
+        if self._interrupt_after_create_once:
+            self._interrupt_after_create_once = False
+            raise RuntimeError("worker interrupted")
         return handle
 
     def launch_agent(
@@ -79,12 +93,20 @@ class FakeExecutor:
             self._interrupt_before_launch_once = False
             raise RuntimeError("worker interrupted")
         self.calls.append("launch_agent")
+        if handle.sandbox_id in self._sessions:
+            return self._sessions[handle.sandbox_id]
         self.agent_launches.append(launch)
         session = AgentSession(
             session_id=f"fake-session-{self._next_session}",
             base_url=f"fake://{handle.sandbox_id}",
         )
+        self._sessions[handle.sandbox_id] = session
         self._next_session += 1
+        if self._after_launch is not None:
+            self._after_launch()
+        if self._interrupt_after_launch_once:
+            self._interrupt_after_launch_once = False
+            raise RuntimeError("worker interrupted")
         return session
 
     def get_attach_endpoints(
