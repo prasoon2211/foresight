@@ -1,4 +1,4 @@
-from core.models import ResultStatus, Run, RunState
+from core.models import FailureReason, ResultStatus, Run, RunState
 from executor import (
     AgentLaunch,
     AgentSession,
@@ -6,16 +6,22 @@ from executor import (
     SandboxHandle,
     SandboxSpec,
 )
-from surfaces.github import notify_run_finished, notify_run_started
+from surfaces.registry import surface_adapter_for
 
 
 def orchestrate_run(run_id: int, executor: Executor) -> None:
     """Advance one run, checkpointing each learned fact before continuing."""
-    run = Run.objects.select_related("signal__repo", "signal__org").get(pk=run_id)
+    run = Run.objects.select_related(
+        "signal__repo",
+        "signal__org",
+        "signal__origin_connection",
+    ).get(pk=run_id)
     if run.state in {RunState.AWAITING_REVIEW, RunState.DONE, RunState.FAILED}:
         return
 
-    notify_run_started(run)
+    surface_adapter = surface_adapter_for(run.signal)
+    if surface_adapter is not None:
+        surface_adapter.notify_run_started(run)
 
     if not run.sandbox_id:
         if run.state == RunState.QUEUED:
@@ -75,15 +81,24 @@ def orchestrate_run(run_id: int, executor: Executor) -> None:
             None,
         )
         if result is None:
-            raise RuntimeError("agent session became idle without a structured result")
-        if result.status != ResultStatus.PR_OPENED:
-            raise RuntimeError(f"happy-path orchestrator cannot handle result {result.status!r}")
-
-        run.result_status = result.status
-        run.pr_url = result.pr_url
-        run.summary = result.summary
-        run.confidence = result.confidence
-        run.state = RunState.AWAITING_REVIEW
+            run.state = RunState.FAILED
+            run.failure_reason = FailureReason.NO_RESULT
+            run.summary = "Run produced no structured result."
+        else:
+            run.result_status = result.status
+            run.pr_url = result.pr_url
+            run.summary = result.summary
+            run.confidence = result.confidence
+            if result.status == ResultStatus.PR_OPENED:
+                run.state = RunState.AWAITING_REVIEW
+            else:
+                run.state = RunState.FAILED
+                if result.status == ResultStatus.FAILED:
+                    run.failure_reason = FailureReason.AGENT_REPORTED_FAILED
+                elif result.status == ResultStatus.BLOCKED:
+                    run.failure_reason = FailureReason.AGENT_REPORTED_BLOCKED
+                else:
+                    raise ValueError(f"unsupported result status: {result.status}")
         run.save(
             update_fields=[
                 "result_status",
@@ -91,7 +106,9 @@ def orchestrate_run(run_id: int, executor: Executor) -> None:
                 "summary",
                 "confidence",
                 "state",
+                "failure_reason",
                 "updated_at",
             ]
         )
-        notify_run_finished(run)
+        if surface_adapter is not None:
+            surface_adapter.notify_run_finished(run)

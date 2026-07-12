@@ -90,7 +90,7 @@ def test_installation_webhooks_activate_connection_and_enable_selected_repos(
         type=SurfaceType.GITHUB,
         status=SurfaceConnectionStatus.PENDING,
         account_label="acme",
-        identity={"installation_id": 12345678},
+        identity={},
     )
 
     created_response = post_webhook(client, "installation", "installation_created.json")
@@ -131,7 +131,7 @@ def test_labeled_issue_runs_to_github_writeback_and_renotify_is_idempotent(
         type=SurfaceType.GITHUB,
         status=SurfaceConnectionStatus.PENDING,
         account_label="acme",
-        identity={"installation_id": 12345678},
+        identity={},
     )
     post_webhook(client, "installation", "installation_created.json")
     post_webhook(
@@ -178,8 +178,17 @@ def test_labeled_issue_runs_to_github_writeback_and_renotify_is_idempotent(
         adapter = GitHubSurfaceAdapter(fake_github)
         adapter.notify_run_started(run)
         adapter.notify_run_finished(run)
+        merged_response = post_webhook(
+            client,
+            "pull_request",
+            "pull_request_merged.json",
+        )
+        run.refresh_from_db()
 
     assert fake_github.calls == calls_after_run
+    assert merged_response.status_code == 202
+    assert run.state == RunState.DONE
+    assert run.pr_merged_at is not None
     assert fake_github.comments == [
         (
             "acme/widgets",
@@ -232,7 +241,7 @@ def test_uninstall_strands_signals_and_reinstall_unstrands_them(client: Client) 
         type=SurfaceType.GITHUB,
         status=SurfaceConnectionStatus.PENDING,
         account_label="acme",
-        identity={"installation_id": 12345678},
+        identity={},
     )
     post_webhook(client, "installation", "installation_created.json")
     post_webhook(
@@ -334,47 +343,63 @@ def test_merged_pull_request_marks_run_and_signal_done(client: Client) -> None:
     assert signal_response.json()["outcome_status"] == RunState.DONE
 
 
-@pytest.mark.django_db
-def test_failed_run_writeback_explains_failure_reason() -> None:
+@pytest.mark.django_db(transaction=True)
+@override_settings(GITHUB_WEBHOOK_SECRET=WEBHOOK_SECRET)
+def test_failed_run_writeback_explains_failure_reason(client: Client) -> None:
     org = Org.objects.create(name="Acme")
-    connection = SurfaceConnection.objects.create(
+    SurfaceConnection.objects.create(
         org=org,
         type=SurfaceType.GITHUB,
-        status=SurfaceConnectionStatus.ACTIVE,
+        status=SurfaceConnectionStatus.PENDING,
         account_label="acme",
         identity={"installation_id": 12345678},
     )
-    repo = Repo.objects.create(
-        org=org,
-        surface_connection=connection,
-        full_name="acme/widgets",
+    post_webhook(client, "installation", "installation_created.json")
+    post_webhook(
+        client,
+        "installation_repositories",
+        "installation_repositories_added.json",
     )
-    signal = Signal.objects.create(
-        org=org,
-        repo=repo,
-        origin_connection=connection,
-        origin_reference={"issue_number": 42},
-        source=SignalSource.GITHUB_ISSUE,
-        title="Fix widget race",
-        body="Two updates can overwrite one another.",
-        intake_state=IntakeState.DISPATCHED,
-    )
-    run = signal.runs.create(
-        state=RunState.FAILED,
-        failure_reason=FailureReason.SETUP_FAILED,
+    fake_executor = FakeExecutor.succeeding(
+        AgentResult(
+            status=ResultStatus.FAILED,
+            pr_url="",
+            summary="The agent could not resolve the issue.",
+            confidence=0.2,
+        )
     )
     fake_github = FakeGitHubClient()
 
-    GitHubSurfaceAdapter(fake_github).notify_run_finished(run)
+    with use_executor(fake_executor), use_github_client(fake_github):
+        response = post_webhook(client, "issues", "issues_labeled.json")
+        assert response.status_code == 202
+        connector = cast(WorkerConnectorFactory, app.connector)
+        with app.replace_connector(connector.get_worker_connector()):
+            app.run_worker(
+                wait=False,
+                install_signal_handlers=False,
+                listen_notify=False,
+            )
 
+    run = Signal.objects.get().runs.get()
+    assert run.state == RunState.FAILED
+    assert run.failure_reason == FailureReason.AGENT_REPORTED_FAILED
     assert fake_github.comments == [
         (
             "acme/widgets",
             42,
-            "Foresight could not complete this run. Failure reason: setup_failed",
-        )
+            "Foresight started this run. "
+            f"[Watch it](http://localhost:8000/orgs/{org.pk}/runs/{run.pk}).",
+        ),
+        (
+            "acme/widgets",
+            42,
+            "Foresight could not complete this run. Failure reason: agent_reported_failed",
+        ),
     ]
-    assert fake_github.label_additions == []
+    assert fake_github.label_additions == [
+        ("acme/widgets", 42, ("foresight:in-progress",)),
+    ]
     assert fake_github.label_removals == [
         ("acme/widgets", 42, "foresight:in-progress"),
     ]

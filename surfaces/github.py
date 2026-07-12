@@ -17,7 +17,7 @@ from core.models import (
     SurfaceConnectionStatus,
     SurfaceType,
 )
-from surfaces.github_client import GitHubClient, get_github_client
+from surfaces.github_client import GitHubClient
 
 RunEnqueuer = Callable[[int], object]
 IN_PROGRESS_LABEL = "foresight:in-progress"
@@ -320,13 +320,3 @@ class GitHubSurfaceAdapter:
         return (
             f"Foresight finished this run and opened [pull request #{pull_number}]({run.pr_url})."
         )
-
-
-def notify_run_started(run: Run) -> None:
-    if run.signal.origin_connection_id is not None:
-        GitHubSurfaceAdapter(get_github_client()).notify_run_started(run)
-
-
-def notify_run_finished(run: Run) -> None:
-    if run.signal.origin_connection_id is not None:
-        GitHubSurfaceAdapter(get_github_client()).notify_run_finished(run)
