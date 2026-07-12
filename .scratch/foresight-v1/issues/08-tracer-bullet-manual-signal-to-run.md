@@ -29,11 +29,15 @@ class Executor(Protocol):
 
 **Blocked by:** 07 — Backend scaffold.
 
-**Status:** claimed
+**Status:** resolved
 
-- [ ] The spec's canonical test shape passes: create a manual signal via the API → run jobs in-process with the fake executor scripted to succeed → run walked `queued → provisioning → running → awaiting_review` with result columns filled
-- [ ] A concurrent second run for the same signal is rejected by the database index, not by application code
-- [ ] Signal outcome status derives correctly from intake state and run states (pure-function tests)
-- [ ] Demoable: with compose up and a worker running, a curl session creates a signal and polls the run to completion
+- [x] The spec's canonical test shape passes: create a manual signal via the API → run jobs in-process with the fake executor scripted to succeed → run walked `queued → provisioning → running → awaiting_review` with result columns filled
+- [x] A concurrent second run for the same signal is rejected by the database index, not by application code
+- [x] Signal outcome status derives correctly from intake state and run states (pure-function tests)
+- [x] Demoable: with compose up and a worker running, a curl session creates a signal and polls the run to completion
 
 Spec sections: Domain model, Orchestration and durability, Executor contract, Testing Decisions. Glossary (`CONTEXT.md`) is canonical for names.
+
+## Comments
+
+2026-07-12 — Built and verified the manual-signal tracer through a checkpointed fake-executor run in [PR #4](https://github.com/prasoon2211/foresight/pull/4).
